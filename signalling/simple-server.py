@@ -187,7 +187,9 @@ async def handler(ws, path):
     print("Connected to {!r}".format(raddr))
     try:
         typ, peer_id = await register_peer(ws)
-    except:
+    except Exception as e:
+        print(f"Got an exception registering peer: {e}")
+        sys.stdout.flush()
         return
     if typ == 'PRODUCER':
         for other_id in listeners:
