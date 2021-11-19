@@ -247,10 +247,10 @@ fn setup_encoding(
         .with_context(|| format!("Creating payloader {}", codec.payloader.name()))?;
     let parse_filter = make_element("capsfilter", None)?;
 
-    pay.set_property("pt", codec.payload as u32).unwrap();
+    pay.set_property("pt", codec.payload as u32);
 
     if let Some(ssrc) = ssrc {
-        pay.set_property("ssrc", ssrc).unwrap();
+        pay.set_property("ssrc", ssrc);
     }
 
     pipeline
@@ -296,37 +296,35 @@ fn setup_encoding(
 
     match codec.encoder.name().as_str() {
         "vp8enc" | "vp9enc" => {
-            enc.set_property("deadline", 1i64).unwrap();
-            enc.set_property("threads", 12i32).unwrap();
-            enc.set_property("target-bitrate", 2560000i32).unwrap();
-            enc.set_property("cpu-used", -16i32).unwrap();
-            enc.set_property("keyframe-max-dist", 2000i32).unwrap();
-            enc.set_property_from_str("end-usage", "cbr").unwrap();
-            enc.set_property("buffer-initial-size", 100i32).unwrap();
-            enc.set_property("buffer-optimal-size", 120i32).unwrap();
-            enc.set_property("buffer-size", 300i32).unwrap();
-            enc.set_property("resize-allowed", true).unwrap();
-            enc.set_property("max-intra-bitrate", 250i32).unwrap();
+            enc.set_property("deadline", 1i64);
+            enc.set_property("threads", 12i32);
+            enc.set_property("target-bitrate", 2560000i32);
+            enc.set_property("cpu-used", -16i32);
+            enc.set_property("keyframe-max-dist", 2000i32);
+            enc.set_property_from_str("end-usage", "cbr");
+            enc.set_property("buffer-initial-size", 100i32);
+            enc.set_property("buffer-optimal-size", 120i32);
+            enc.set_property("buffer-size", 300i32);
+            enc.set_property("resize-allowed", true);
+            enc.set_property("max-intra-bitrate", 250i32);
 
-            pay.set_property_from_str("picture-id-mode", "15-bit")
-                .unwrap();
+            pay.set_property_from_str("picture-id-mode", "15-bit");
         }
         "x264enc" => {
-            enc.set_property("bitrate", 25608u32).unwrap();
-            enc.set_property_from_str("tune", "zerolatency").unwrap();
-            enc.set_property_from_str("speed-preset", "ultrafast")
-                .unwrap();
-            enc.set_property("threads", 12u32).unwrap();
-            enc.set_property("key-int-max", 2560u32).unwrap();
-            enc.set_property("b-adapt", false).unwrap();
-            enc.set_property("vbv-buf-capacity", 120u32).unwrap();
+            enc.set_property("bitrate", 25608u32);
+            enc.set_property_from_str("tune", "zerolatency");
+            enc.set_property_from_str("speed-preset", "ultrafast");
+            enc.set_property("threads", 12u32);
+            enc.set_property("key-int-max", 2560u32);
+            enc.set_property("b-adapt", false);
+            enc.set_property("vbv-buf-capacity", 120u32);
         }
         "nvh264enc" => {
-            enc.set_property("bitrate", 2048u32).unwrap();
-            enc.set_property("gop-size", 2560i32).unwrap();
-            enc.set_property_from_str("rc-mode", "cbr").unwrap();
-            enc.set_property("vbv-buffer-size", 120u32).unwrap();
-            enc.set_property("zerolatency", true).unwrap();
+            enc.set_property("bitrate", 2048u32);
+            enc.set_property("gop-size", 2560i32);
+            enc.set_property_from_str("rc-mode", "cbr");
+            enc.set_property("vbv-buffer-size", 120u32);
+            enc.set_property("zerolatency", true);
         }
         _ => (),
     }
@@ -340,11 +338,10 @@ fn setup_encoding(
     if twcc {
         let twcc_extension = gst_rtp::RTPHeaderExtension::create_from_uri(RTP_TWCC_URI).unwrap();
         twcc_extension.set_id(1);
-        pay.emit_by_name("add-extension", &[&twcc_extension])
-            .unwrap();
+        pay.emit_by_name("add-extension", &[&twcc_extension]);
     }
 
-    conv_filter.set_property("caps", conv_caps).unwrap();
+    conv_filter.set_property("caps", conv_caps);
 
     let parse_caps = if codec_name == "video/x-h264" {
         gst::Caps::builder(codec_name)
@@ -359,7 +356,7 @@ fn setup_encoding(
         gst::Caps::new_any()
     };
 
-    parse_filter.set_property("caps", parse_caps).unwrap();
+    parse_filter.set_property("caps", parse_caps);
 
     gst::Element::link_many(&[&parse_filter, &pay]).with_context(|| "Linking encoding elements")?;
 
@@ -424,18 +421,9 @@ impl VideoEncoder {
         match self.factory_name.as_str() {
             "vp8enc" | "vp9enc" => self
                 .element
-                .property("target-bitrate")
-                .unwrap()
-                .get::<i32>()
-                .unwrap(),
+                .property::<i32>("target-bitrate"),
             "x264enc" | "nvh264enc" => {
-                (self
-                    .element
-                    .property("bitrate")
-                    .unwrap()
-                    .get::<u32>()
-                    .unwrap()
-                    * 1000) as i32
+                (self.element.property::<u32>("bitrate") * 1000) as i32
             }
             _ => unreachable!(),
         }
@@ -445,21 +433,16 @@ impl VideoEncoder {
         match self.factory_name.as_str() {
             "vp8enc" | "vp9enc" => self
                 .element
-                .set_property("target-bitrate", bitrate)
-                .unwrap(),
+                .set_property("target-bitrate", bitrate),
             "x264enc" | "nvh264enc" => self
                 .element
-                .set_property("bitrate", (bitrate / 1000) as u32)
-                .unwrap(),
+                .set_property("bitrate", (bitrate / 1000) as u32),
             _ => unreachable!(),
         }
 
         let mut s = self
             .filter
-            .property("caps")
-            .unwrap()
-            .get::<gst::Caps>()
-            .unwrap()
+            .property::<gst::Caps>("caps")
             .structure(0)
             .unwrap()
             .to_owned();
@@ -492,7 +475,7 @@ impl VideoEncoder {
             self.element
         );
 
-        self.filter.set_property("caps", caps).unwrap();
+        self.filter.set_property("caps", caps);
     }
 }
 
@@ -803,21 +786,16 @@ impl Consumer {
             .unwrap();
 
         let transceiver = pad
-            .property("transceiver")
-            .unwrap()
-            .get::<gst_webrtc::WebRTCRTPTransceiver>()
-            .unwrap();
+            .property::<gst_webrtc::WebRTCRTPTransceiver>("transceiver");
 
         transceiver
             .set_property(
                 "direction",
                 gst_webrtc::WebRTCRTPTransceiverDirection::Sendonly,
-            )
-            .unwrap();
+            );
 
         transceiver
-            .set_property("codec-preferences", &payloader_caps)
-            .unwrap();
+            .set_property("codec-preferences", &payloader_caps);
 
         self.webrtc_pads.insert(
             ssrc,
@@ -1111,8 +1089,7 @@ impl WebRTCSink {
         if let Some(consumer) = state.consumers.get(&peer_id) {
             consumer
                 .webrtcbin
-                .emit_by_name("set-local-description", &[&offer, &None::<gst::Promise>])
-                .unwrap();
+                .emit_by_name("set-local-description", &[&offer, &None::<gst::Promise>]);
 
             if let Err(err) = state.signaller.handle_sdp(element, &peer_id, &offer) {
                 gst_warning!(
@@ -1189,8 +1166,7 @@ impl WebRTCSink {
 
             consumer
                 .webrtcbin
-                .emit_by_name("create-offer", &[&None::<gst::Structure>, &promise])
-                .unwrap();
+                .emit_by_name("create-offer", &[&None::<gst::Structure>, &promise]);
         } else {
             gst_debug!(
                 CAT,
@@ -1241,19 +1217,16 @@ impl WebRTCSink {
         let webrtcbin = make_element("webrtcbin", None)?;
 
         webrtcbin
-            .set_property_from_str("bundle-policy", "max-bundle")
-            .unwrap();
+            .set_property_from_str("bundle-policy", "max-bundle");
 
         if let Some(stun_server) = settings.stun_server.as_ref() {
             webrtcbin
-                .set_property("stun-server", stun_server.to_value())
-                .unwrap();
+                .set_property("stun-server", stun_server.to_value());
         }
 
         if let Some(turn_server) = settings.turn_server.as_ref() {
             webrtcbin
-                .set_property("turn-server", turn_server.to_value())
-                .unwrap();
+                .set_property("turn-server", turn_server.to_value());
         }
 
         pipeline.add(&webrtcbin).unwrap();
@@ -1268,8 +1241,7 @@ impl WebRTCSink {
                 }
 
                 None
-            })
-            .unwrap();
+            });
 
         let element_clone = element.downgrade();
         let peer_id_clone = peer_id.to_owned();
@@ -1287,18 +1259,14 @@ impl WebRTCSink {
                     );
                 }
                 None
-            })
-            .unwrap();
+            });
 
         let element_clone = element.downgrade();
         let peer_id_clone = peer_id.to_owned();
         webrtcbin.connect_notify(Some("connection-state"), move |webrtcbin, _pspec| {
             if let Some(element) = element_clone.upgrade() {
                 let state = webrtcbin
-                    .property("connection-state")
-                    .unwrap()
-                    .get::<gst_webrtc::WebRTCPeerConnectionState>()
-                    .unwrap();
+                    .property::<gst_webrtc::WebRTCPeerConnectionState>("connection-state");
 
                 match state {
                     gst_webrtc::WebRTCPeerConnectionState::Failed => {
@@ -1329,10 +1297,7 @@ impl WebRTCSink {
         webrtcbin.connect_notify(Some("ice-connection-state"), move |webrtcbin, _pspec| {
             if let Some(element) = element_clone.upgrade() {
                 let state = webrtcbin
-                    .property("ice-connection-state")
-                    .unwrap()
-                    .get::<gst_webrtc::WebRTCICEConnectionState>()
-                    .unwrap();
+                    .property::<gst_webrtc::WebRTCICEConnectionState>("ice-connection-state");
                 let this = Self::from_instance(&element);
 
                 match state {
@@ -1378,10 +1343,7 @@ impl WebRTCSink {
         let peer_id_clone = peer_id.to_owned();
         webrtcbin.connect_notify(Some("ice-gathering-state"), move |webrtcbin, _pspec| {
             let state = webrtcbin
-                .property("ice-gathering-state")
-                .unwrap()
-                .get::<gst_webrtc::WebRTCICEGatheringState>()
-                .unwrap();
+                .property::<gst_webrtc::WebRTCICEGatheringState>("ice-gathering-state");
 
             if let Some(element) = element_clone.upgrade() {
                 gst_log!(
@@ -1457,7 +1419,7 @@ impl WebRTCSink {
 
         pipeline.set_state(gst::State::Ready)?;
 
-        element.emit_by_name("new-webrtcbin", &[&peer_id.to_value(), &webrtcbin.to_value()])?;
+        element.emit_by_name("new-webrtcbin", &[&peer_id.to_value(), &webrtcbin.to_value()]);
 
         pipeline.set_state(gst::State::Playing)?;
 
@@ -1559,8 +1521,7 @@ impl WebRTCSink {
                         });
 
                         webrtcbin
-                            .emit_by_name("get-stats", &[&None::<gst::Pad>, &promise])
-                            .unwrap();
+                            .emit_by_name("get-stats", &[&None::<gst::Pad>, &promise]);
                     } else {
                         break;
                     }
@@ -1596,8 +1557,7 @@ impl WebRTCSink {
                 .emit_by_name(
                     "add-ice-candidate",
                     &[&sdp_mline_index, &candidate.to_string()],
-                )
-                .unwrap();
+                );
             Ok(())
         } else {
             Err(anyhow!("No consumer with ID {}", peer_id))
@@ -1664,8 +1624,7 @@ impl WebRTCSink {
 
             consumer
                 .webrtcbin
-                .emit_by_name("set-remote-description", &[desc, &promise])
-                .unwrap();
+                .emit_by_name("set-remote-description", &[desc, &promise]);
 
             Ok(())
         } else {
@@ -1699,9 +1658,9 @@ impl WebRTCSink {
         pay.link(&sink)
             .with_context(|| format!("Running discovery pipeline for caps {}", caps))?;
 
-        capsfilter.set_property("caps", caps).unwrap();
+        capsfilter.set_property("caps", caps);
 
-        src.set_property("num-buffers", 1).unwrap();
+        src.set_property("num-buffers", 1);
 
         let mut stream = pipe.0.bus().unwrap().stream();
 
