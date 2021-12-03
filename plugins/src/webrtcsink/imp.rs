@@ -953,6 +953,17 @@ impl Consumer {
             }
         }));
         filtered_s.set("ssrc", webrtc_pad.ssrc);
+        // We force the profile to "constrained-baseline" so whenever
+        // `level-asymmetry-allowed we know that we will respect what the peer
+        // requested.
+        // FIXME - Remove once https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/1410
+        // is merged.
+        if let Ok(level_asymetry_alllowed) = filtered_s.get::<&str>("level-asymmetry-allowed") {
+            if level_asymetry_alllowed == "1" {
+                filtered_s.remove_field("profile-level-id");
+            }
+        }
+
 
         let caps = gst::Caps::builder_full().structure(filtered_s).build();
 
