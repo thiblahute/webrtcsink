@@ -165,6 +165,12 @@ async def connection_handler(ws, uid):
             except KeyError:
                 continue
 
+            candidate = msg.get("ice", {}).get("candidate")
+            if candidate:
+                if candidate.split()[4].endswith(".local"):
+                    logger.info(f"Ignoring local candidate: {candidate}")
+                    continue
+
             msg['peer-id'] = uid
             msg = json.dumps(msg)
             logger.debug("Got peer: {} -> {}: {}".format(uid, other_id, msg))

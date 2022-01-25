@@ -46,8 +46,7 @@
           case "downsampled": {
             mitigation_mode |= MitigationMode.Downsampled
             break
-          } 
-        }
+                  }
       }
 
       consumer.mitigation_mode = mitigation_mode
