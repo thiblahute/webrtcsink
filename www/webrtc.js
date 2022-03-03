@@ -111,7 +111,13 @@ function Session(our_id, peer_id, closed_callback) {
         var thiz = this;
         this.peer_connection.setLocalDescription(desc).then(() => {
             this.setStatus("Sending SDP answer");
-            var sdp = {'peer-id': this.peer_id, 'sdp': this.peer_connection.localDescription.toJSON()}
+            var sdp = {
+                'type': 'peer',
+                'peer_id': this.peer_id,
+                'peer_message': {
+                    'sdp': this.peer_connection.localDescription.toJSON()
+                }
+            };
             this.ws_conn.send(JSON.stringify(sdp));
         }).catch(function(e) {
             thiz.setError(e);
@@ -146,33 +152,34 @@ function Session(our_id, peer_id, closed_callback) {
 
     this.onServerMessage = function(event) {
         console.log("Received " + event.data);
-        if (event.data.startsWith("REGISTERED")) {
+        try {
+            msg = JSON.parse(event.data);
+        } catch (e) {
+            if (e instanceof SyntaxError) {
+                this.handleIncomingError("Error parsing incoming JSON: " + event.data);
+            } else {
+                this.handleIncomingError("Unknown error parsing response: " + event.data);
+            }
+            return;
+        }
+
+        if (msg.type == "registered") {
             this.setStatus("Registered with server");
             this.connectPeer();
-        } else if (event.data.startsWith("ERROR")) {
-            this.handleIncomingError(event.data);
-            return;
-        } else {
-            // Handle incoming JSON SDP and ICE messages
-            try {
-                msg = JSON.parse(event.data);
-            } catch (e) {
-                if (e instanceof SyntaxError) {
-                    this.handleIncomingError("Error parsing incoming JSON: " + event.data);
-                } else {
-                    this.handleIncomingError("Unknown error parsing response: " + event.data);
-                }
-                return;
-            }
-
-            // Incoming JSON signals the beginning of a call
+        } else if (msg.type == "error") {
+            this.handleIncomingError(msg.details);
+        } else if (msg.type == "endsession") {
+            this.resetState();
+            this.closed_callback(this.our_id);
+        } else if (msg.type == "peer") {
+            // Incoming peer message signals the beginning of a call
             if (!this.peer_connection)
                 this.createCall(msg);
 
-            if (msg.sdp != null) {
-                this.onIncomingSDP(msg.sdp);
-            } else if (msg.ice != null) {
-                this.onIncomingICE(msg.ice);
+            if (msg.peer_message.sdp != null) {
+                this.onIncomingSDP(msg.peer_message.sdp);
+            } else if (msg.peer_message.ice != null) {
+                this.onIncomingICE(msg.peer_message.ice);
             } else {
                 this.handleIncomingError("Unknown incoming JSON: " + msg);
             }
@@ -211,7 +218,10 @@ function Session(our_id, peer_id, closed_callback) {
         this.ws_conn = new WebSocket(ws_url);
         /* When connected, immediately register with the server */
         this.ws_conn.addEventListener('open', (event) => {
-            this.ws_conn.send('REGISTER CONSUMER');
+            this.ws_conn.send(JSON.stringify({
+                "type": "register",
+                "peer-type": "consumer"
+            }));
             this.setStatus("Registering with server");
         });
         this.ws_conn.addEventListener('error', this.onServerError.bind(this));
@@ -222,7 +232,10 @@ function Session(our_id, peer_id, closed_callback) {
     this.connectPeer = function() {
         this.setStatus("Connecting " + this.peer_id);
 
-        this.ws_conn.send("START_SESSION " + this.peer_id);
+        this.ws_conn.send(JSON.stringify({
+            "type": "startsession",
+            "peer_id": this.peer_id
+        }));
     };
 
     this.onRemoteStreamAdded = function(event) {
@@ -304,7 +317,12 @@ function Session(our_id, peer_id, closed_callback) {
                 console.log("ICE Candidate was null, done");
                 return;
             }
-            this.ws_conn.send(JSON.stringify({'ice': event.candidate.toJSON(), 'peer-id': this.peer_id}));
+            this.ws_conn.send(JSON.stringify({
+                "type": "peer",
+                "peer_id": this.peer_id,
+                "peer_message": {
+                    "ice": event.candidate.toJSON()
+                }}));
         };
 
         this.setStatus("Created peer connection for call, waiting for SDP");
@@ -354,23 +372,34 @@ function clearPeers() {
 
 function onServerMessage(event) {
     console.log("Received " + event.data);
-    if (event.data.startsWith("REGISTERED ")) {
-        console.log("Listener registered");
-        ws_conn.send('LIST');
-    } else if (event.data.startsWith('LIST')) {
-        var split = event.data.split(' ');
-        clearPeers();
 
-        for (var i = 1; i < split.length; i++) {
-            addPeer(split[i]);
+    try {
+        msg = JSON.parse(event.data);
+    } catch (e) {
+        if (e instanceof SyntaxError) {
+            this.handleIncomingError("Error parsing incoming JSON: " + event.data);
+        } else {
+            this.handleIncomingError("Unknown error parsing response: " + event.data);
         }
-    } else if (event.data.startsWith('ADD PRODUCER')) {
-        var split = event.data.split(' ');
-        addPeer(split[2]);
-    } else if (event.data.startsWith('REMOVE PRODUCER')) {
-        var split = event.data.split(' ');
-        var li = document.getElementById("peer-" + split[2]);
+        return;
+    }
+
+    if (msg.type == "registered") {
+        ws_conn.send(JSON.stringify({
+            "type": "list"
+        }));
+    } else if (msg.type == "list") {
+        clearPeers();
+        for (i = 0; i < msg.producers.length; i++) {
+            addPeer(msg.producers[i]);
+        }
+    } else if (msg.type == "produceradded") {
+        addPeer(msg.peer_id);
+    } else if (msg.type == "producerremoved") {
+        var li = document.getElementById("peer-" + msg.peer_id);
         li.parentNode.removeChild(li);
+    } else {
+        this.handleIncomingError("Unsupported message: ", msg);
     }
 };
 
@@ -408,7 +437,10 @@ function connect() {
     console.log("Connecting listener");
     ws_conn = new WebSocket(ws_url);
     ws_conn.addEventListener('open', (event) => {
-        ws_conn.send('REGISTER LISTENER');
+        ws_conn.send(JSON.stringify({
+            "type": "register",
+            "peer-type": "listener"
+        }));
     });
     ws_conn.addEventListener('error', onServerError);
     ws_conn.addEventListener('message', onServerMessage);

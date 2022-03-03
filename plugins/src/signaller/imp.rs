@@ -28,7 +28,41 @@ struct State {
     receive_task_handle: Option<task::JoinHandle<()>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(tag = "peer-type")]
+#[serde(rename_all = "lowercase")]
+enum RegisteredMessage {
+    Producer,
+    Consumer,
+    Listener,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+enum IncomingMessage {
+    Registered(RegisteredMessage),
+    StartSession { peer_id: String },
+    EndSession { peer_id: String },
+    Peer(PeerMessage),
+}
+
 #[derive(Serialize, Deserialize)]
+#[serde(tag = "peer-type")]
+#[serde(rename_all = "lowercase")]
+enum RegisterMessage {
+    Producer,
+    Consumer,
+    Listener,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+struct StartSessionMessage {
+    peer_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 enum SdpMessage {
@@ -36,9 +70,9 @@ enum SdpMessage {
     Answer { sdp: String },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
-enum JsonMsgInner {
+enum PeerMessageInner {
     Ice {
         candidate: String,
         #[serde(rename = "sdpMLineIndex")]
@@ -47,15 +81,28 @@ enum JsonMsgInner {
     Sdp(SdpMessage),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
-struct JsonMsg {
-    #[serde(rename = "peer-id")]
+struct PeerMessage {
     peer_id: String,
-    #[serde(flatten)]
-    inner: JsonMsgInner,
+    peer_message: PeerMessageInner,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+struct EndSessionMessage {
+    peer_id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+enum OutgoingMessage {
+    Register(RegisterMessage),
+    StartSession(StartSessionMessage),
+    EndSession(EndSessionMessage),
+    Peer(PeerMessage),
+}
 struct Settings {
     address: Option<String>,
 }
@@ -93,7 +140,10 @@ impl Signaller {
         let (mut ws_sink, mut ws_stream) = ws.split();
 
         ws_sink
-            .send(WsMessage::Text("REGISTER PRODUCER".to_string()))
+            .send(WsMessage::Text(
+                serde_json::to_string(&OutgoingMessage::Register(RegisterMessage::Producer))
+                    .unwrap(),
+            ))
             .await?;
 
         // 1000 is completely arbitrary, we simply don't want infinite piling
@@ -126,50 +176,65 @@ impl Signaller {
                         Ok(WsMessage::Text(msg)) => {
                             gst_trace!(CAT, obj: &element, "Received message {}", msg);
 
-                            if msg.starts_with("REGISTERED ") {
-                                gst_info!(CAT, obj: &element, "We are registered with the server");
-                            } else if let Some(peer_id) = msg.strip_prefix("START_SESSION ") {
-                                if let Err(err) = element.add_consumer(peer_id) {
-                                    gst_warning!(CAT, obj: &element, "{}", err);
-                                }
-                            } else if let Some(peer_id) = msg.strip_prefix("END_SESSION ") {
-                                if let Err(err) = element.remove_consumer(peer_id) {
-                                    gst_warning!(CAT, obj: &element, "{}", err);
-                                }
-                            } else if let Ok(msg) = serde_json::from_str::<JsonMsg>(&msg) {
-                                match msg.inner {
-                                    JsonMsgInner::Sdp(SdpMessage::Answer { sdp }) => {
-                                        if let Err(err) = element.handle_sdp(
-                                            &msg.peer_id,
-                                            &gst_webrtc::WebRTCSessionDescription::new(
-                                                gst_webrtc::WebRTCSDPType::Answer,
-                                                gst_sdp::SDPMessage::parse_buffer(sdp.as_bytes())
-                                                    .unwrap(),
-                                            ),
-                                        ) {
-                                            gst_warning!(CAT, obj: &element, "{}", err);
-                                        }
-                                    }
-                                    JsonMsgInner::Sdp(SdpMessage::Offer { .. }) => {
-                                        gst_warning!(
+                            if let Ok(msg) = serde_json::from_str::<IncomingMessage>(&msg) {
+                                match msg {
+                                    IncomingMessage::Registered(RegisteredMessage::Producer) => {
+                                        gst_info!(
                                             CAT,
                                             obj: &element,
-                                            "Ignoring offer from peer"
+                                            "We are registered with the server"
                                         );
                                     }
-                                    JsonMsgInner::Ice {
-                                        candidate,
-                                        sdp_mline_index,
-                                    } => {
-                                        if let Err(err) = element.handle_ice(
-                                            &msg.peer_id,
-                                            Some(sdp_mline_index),
-                                            None,
-                                            &candidate,
-                                        ) {
+                                    IncomingMessage::Registered(_) => unreachable!(),
+                                    IncomingMessage::StartSession { peer_id } => {
+                                        if let Err(err) = element.add_consumer(&peer_id) {
                                             gst_warning!(CAT, obj: &element, "{}", err);
                                         }
                                     }
+                                    IncomingMessage::EndSession { peer_id } => {
+                                        if let Err(err) = element.remove_consumer(&peer_id) {
+                                            gst_warning!(CAT, obj: &element, "{}", err);
+                                        }
+                                    }
+                                    IncomingMessage::Peer(PeerMessage {
+                                        peer_id,
+                                        peer_message,
+                                    }) => match peer_message {
+                                        PeerMessageInner::Sdp(SdpMessage::Answer { sdp }) => {
+                                            if let Err(err) = element.handle_sdp(
+                                                &peer_id,
+                                                &gst_webrtc::WebRTCSessionDescription::new(
+                                                    gst_webrtc::WebRTCSDPType::Answer,
+                                                    gst_sdp::SDPMessage::parse_buffer(
+                                                        sdp.as_bytes(),
+                                                    )
+                                                    .unwrap(),
+                                                ),
+                                            ) {
+                                                gst_warning!(CAT, obj: &element, "{}", err);
+                                            }
+                                        }
+                                        PeerMessageInner::Sdp(SdpMessage::Offer { .. }) => {
+                                            gst_warning!(
+                                                CAT,
+                                                obj: &element,
+                                                "Ignoring offer from peer"
+                                            );
+                                        }
+                                        PeerMessageInner::Ice {
+                                            candidate,
+                                            sdp_mline_index,
+                                        } => {
+                                            if let Err(err) = element.handle_ice(
+                                                &peer_id,
+                                                Some(sdp_mline_index),
+                                                None,
+                                                &candidate,
+                                            ) {
+                                                gst_warning!(CAT, obj: &element, "{}", err);
+                                            }
+                                        }
+                                    },
                                 }
                             } else {
                                 gst_error!(
@@ -237,12 +302,12 @@ impl Signaller {
     ) {
         let state = self.state.lock().unwrap();
 
-        let msg = JsonMsg {
+        let msg = OutgoingMessage::Peer(PeerMessage {
             peer_id: peer_id.to_string(),
-            inner: JsonMsgInner::Sdp(SdpMessage::Offer {
+            peer_message: PeerMessageInner::Sdp(SdpMessage::Offer {
                 sdp: sdp.sdp().as_text().unwrap(),
             }),
-        };
+        });
 
         if let Some(mut sender) = state.websocket_sender.clone() {
             let element = element.downgrade();
@@ -269,13 +334,13 @@ impl Signaller {
     ) {
         let state = self.state.lock().unwrap();
 
-        let msg = JsonMsg {
+        let msg = OutgoingMessage::Peer(PeerMessage {
             peer_id: peer_id.to_string(),
-            inner: JsonMsgInner::Ice {
+            peer_message: PeerMessageInner::Ice {
                 candidate: candidate.to_string(),
                 sdp_mline_index: sdp_mline_index.unwrap(),
             },
-        };
+        });
 
         if let Some(mut sender) = state.websocket_sender.clone() {
             let element = element.downgrade();
@@ -324,7 +389,12 @@ impl Signaller {
         if let Some(mut sender) = state.websocket_sender.clone() {
             task::spawn(async move {
                 if let Err(err) = sender
-                    .send(WsMessage::Text(format!("END_SESSION {}", peer_id)))
+                    .send(WsMessage::Text(
+                        serde_json::to_string(&OutgoingMessage::EndSession(EndSessionMessage {
+                            peer_id: peer_id.to_string(),
+                        }))
+                        .unwrap(),
+                    ))
                     .await
                 {
                     if let Some(element) = element.upgrade() {
