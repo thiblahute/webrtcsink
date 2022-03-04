@@ -8,6 +8,7 @@ use gst_utils::StreamProducer;
 use gst_video::prelude::*;
 use gst_video::subclass::prelude::*;
 use gst_webrtc::WebRTCDataChannel;
+use serde_json::json;
 
 use async_std::task;
 use futures::prelude::*;
@@ -17,6 +18,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::ops::Mul;
 use std::sync::Mutex;
+use std::time::SystemTime;
 
 use super::{WebRTCSinkCongestionControl, WebRTCSinkError, WebRTCSinkMitigationMode};
 use crate::signaller::Signaller;
@@ -229,16 +231,6 @@ struct State {
     video_serial: u32,
     streams: HashMap<String, InputStream>,
     navigation_handler: Option<NavigationEventHandler>,
-}
-
-fn create_navigation_event<N: IsA<gst_video::Navigation>>(sink: &N, msg: &str) {
-    let event: Result<gst_video::NavigationEvent, _> = serde_json::from_str(msg);
-
-    if let Ok(event) = event {
-        sink.send_event(event.structure());
-    } else {
-        gst::error!(CAT, "Invalid navigation event: {:?}", msg);
-    }
 }
 
 /// Wrapper around `gst::ElementFactory::make` with a better error
@@ -1356,9 +1348,41 @@ impl NavigationEventHandler {
         Self((
             channel.connect("on-message-string", false, move |values| {
                 if let Some(element) = weak_element.upgrade() {
-                    let _channel = values[0].get::<WebRTCDataChannel>().unwrap();
+                    let channel = values[0].get::<WebRTCDataChannel>().unwrap();
                     let msg = values[1].get::<&str>().unwrap();
-                    create_navigation_event(&element, msg);
+
+
+                    let event: Result<gst_video::NavigationEvent, _> = serde_json::from_str(msg);
+                    match event {
+                        Ok(event) => {
+                            let mut structure = event.structure();
+
+                            let root: serde_json::Value = serde_json::from_str(msg)
+                                .expect("We already parsed the json as GstEvent, that shouldn't fail");
+                            let value: Option<u64> =
+                                root.get("timestamp")
+                                    .and_then(|value| value.as_u64());
+
+                            match value {
+                                Some(timestamp) => {
+                                    channel.send_string(Some(&json!({
+                                        "type": "gst-event-ack",
+                                        "timestamp": timestamp,
+                                        "computed_latency_mid": (SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64).overflowing_sub(timestamp).0,
+                                        "timestamp_mid": SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64,
+                                    }).to_string()));
+
+                                    structure.set("remote-ts", timestamp);
+                                    structure.set("received-ts", gst::util_get_timestamp());
+                                },
+                                None => gst::error!(CAT, "Could not get timestamp from `{}`", msg),
+                            }
+                            gst_video::Navigation::send_event(element.upcast_ref(), structure);
+                        }
+                        Err(err) => {
+                            gst::error!(CAT, "Err {:?}", err);
+                        }
+                    }
                 }
 
                 None
