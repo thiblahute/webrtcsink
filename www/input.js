@@ -163,7 +163,7 @@ class Input {
         data["x"] = this.x;
         data["y"] = this.y;
 
-        this.send(JSON.stringify(data));
+        this.send(data);
     }
 
     /**
@@ -193,7 +193,7 @@ class Input {
         data["x"] = this.x;
         data["y"] = this.y;
 
-        this.send(JSON.stringify(data));
+        this.send(data);
     }
 
     /**
@@ -209,7 +209,7 @@ class Input {
             "delta_y": -event.deltaY,
         };
 
-        this.send(JSON.stringify(data));
+        this.send(data);
 
         event.preventDefault();
     }
@@ -404,10 +404,10 @@ class Input {
         // Using guacamole keyboard because it has the keysym translations.
         this.keyboard = new Keyboard(window);
         this.keyboard.onkeydown = (keysym) => {
-            this.send(JSON.stringify( {"event": "KeyPress", "key": keysym}));
+            this.send({"event": "KeyPress", "key": keysym});
         };
         this.keyboard.onkeyup = (keysym) => {
-            this.send(JSON.stringify( {"event": "KeyRelease", "key": keysym}));
+            this.send({"event": "KeyRelease", "key": keysym});
         };
 
         this._windowMath();

@@ -265,8 +265,10 @@ function Session(our_id, peer_id, closed_callback) {
             if (video_element) {
                 this.input = new Input(video_element, (data) => {
                     if (this.data_channel) {
-                        console.log(`Navigation data: ${data}`);
-                        this.data_channel.send(data);
+                        data["timestamp"] = new Date().getTime();
+                        let jdata = JSON.stringify(data);
+                        console.log(`Navigation data: ${jdata}`);
+                        this.data_channel.send(jdata);
                     }
                 });
             }
@@ -289,14 +291,18 @@ function Session(our_id, peer_id, closed_callback) {
             let buffer = [];
             this.data_channel.onmessage = (event) => {
                 if (typeof event.data === 'string' || event.data instanceof String) {
-                    if (event.data == 'BEGIN_IMAGE')
-                        buffer = [];
-                    else if (event.data == 'END_IMAGE') {
-                        var decoder = new TextDecoder("ascii");
-                        var array_buffer = new Uint8Array(buffer);
-                        var str = decoder.decode(array_buffer);
-                        let img = document.getElementById("image");
-                        img.src = 'data:image/png;base64, ' + str;
+                    let msg = JSON.parse(event.data);
+
+                    if (!msg || !msg.type) {
+                        console.error(`Invalid json ${event.data} (${msg})`)
+                    } else if (msg.type == "gst_event_ack") {
+                        let latency = (new Date().getTime() - msg.timestamp) / 2;
+
+                        if (latency > 200) {
+                            console.warn(`Very high latency on the data channel: ${latency}`);
+                        } else {
+                            console.debug(`Data channel round trip latency: ${latency} - peer to local latency: ${new Date().getTime() - msg.timestamp_mid} - peer reported: ${msg.computed_latency_mid}`);
+                        }
                     }
                 } else {
                     var i, len = buffer.length
