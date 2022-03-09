@@ -205,7 +205,7 @@ function Session(our_id, peer_id, closed_callback) {
         span.classList.remove('error');
         span.textContent = '';
         console.log("Our ID:", this.our_id);
-        var ws_port = ws_port || '8443';
+        var ws_port = ws_port || '5002';
         if (window.location.protocol.startsWith ("file")) {
             var ws_server = ws_server || "127.0.0.1";
         } else if (window.location.protocol.startsWith ("http")) {
@@ -425,7 +425,7 @@ function onServerError(event) {
 };
 
 function connect() {
-    var ws_port = ws_port || '8443';
+    var ws_port = ws_port || '5002';
     if (window.location.protocol.startsWith ("file")) {
         var ws_server = ws_server || "127.0.0.1";
     } else if (window.location.protocol.startsWith ("http")) {
