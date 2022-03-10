@@ -9,7 +9,7 @@ pub trait MessageHandler: Sync + Send {
     fn handle_message(
         &mut self,
         sender: &mut dyn MessageSender,
-        message: String,
+        message: &str,
         peer_id: &str,
     ) -> Result<(), Box<dyn std::error::Error>>;
 
@@ -441,12 +441,12 @@ impl MessageHandler for DefaultMessageHandler {
     fn handle_message(
         &mut self,
         sender: &mut dyn MessageSender,
-        message: String,
+        message: &str,
         peer_id: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         debug!("Handling {}", message);
 
-        if let Ok(message) = serde_json::from_str::<p::IncomingMessage>(&message) {
+        if let Ok(message) = serde_json::from_str::<p::IncomingMessage>(message) {
             match message {
                 p::IncomingMessage::Register(message) => match message {
                     p::RegisterMessage::Producer => self.register_producer(sender, peer_id),
@@ -486,7 +486,7 @@ impl MessageHandler for DefaultMessageHandler {
             }
             .map_err(|err| err.into())
         } else {
-            Err(anyhow!("Unsupported message").into())
+            Err(anyhow!("Unsupported message: {}", message).into())
         }
     }
 }
@@ -527,7 +527,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -551,7 +551,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -563,7 +563,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "listener",
             )
             .unwrap();
@@ -589,7 +589,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -614,7 +614,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -622,7 +622,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -638,7 +638,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "listener",
             )
             .unwrap();
@@ -650,7 +650,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -676,7 +676,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -688,7 +688,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -702,7 +702,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -728,7 +728,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -740,7 +740,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -754,7 +754,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -766,7 +766,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "listener",
             )
             .unwrap();
@@ -806,7 +806,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -818,7 +818,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -832,7 +832,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -846,7 +846,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -872,7 +872,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -884,7 +884,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -898,7 +898,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -912,7 +912,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -939,7 +939,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -951,7 +951,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -965,7 +965,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -979,7 +979,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -993,7 +993,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1009,7 +1009,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1021,7 +1021,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1035,7 +1035,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1052,7 +1052,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1081,7 +1081,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1093,7 +1093,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1107,7 +1107,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1125,7 +1125,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1155,7 +1155,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1186,7 +1186,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1198,7 +1198,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1212,7 +1212,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1229,7 +1229,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1246,7 +1246,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1260,7 +1260,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1277,7 +1277,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1291,7 +1291,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1308,7 +1308,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "producer",
             )
             .unwrap();
@@ -1320,7 +1320,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1334,7 +1334,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
@@ -1348,7 +1348,7 @@ mod tests {
         handler
             .handle_message(
                 &mut sender,
-                serde_json::to_string(&message).unwrap(),
+                &serde_json::to_string(&message).unwrap(),
                 "consumer",
             )
             .unwrap();
