@@ -275,7 +275,7 @@ impl DefaultMessageHandler {
 
             sender.send_message(
                 serde_json::to_string(&p::OutgoingMessage::Registered(
-                    p::RegisteredMessage::Producer,
+                    p::RegisteredMessage::Producer { id: peer_id.to_string() },
                 ))
                 .unwrap(),
                 peer_id,
@@ -301,7 +301,7 @@ impl DefaultMessageHandler {
 
             sender.send_message(
                 serde_json::to_string(&p::OutgoingMessage::Registered(
-                    p::RegisteredMessage::Consumer,
+                    p::RegisteredMessage::Consumer { id: peer_id.to_string() },
                 ))
                 .unwrap(),
                 peer_id,
@@ -325,7 +325,7 @@ impl DefaultMessageHandler {
         } else {
             sender.send_message(
                 serde_json::to_string(&p::OutgoingMessage::Registered(
-                    p::RegisteredMessage::Listener,
+                    p::RegisteredMessage::Listener { id: peer_id.to_string() },
                 ))
                 .unwrap(),
                 peer_id,
@@ -537,7 +537,7 @@ mod tests {
         assert_eq!(sent_message.peer_id, "producer");
         assert_eq!(
             serde_json::from_str::<p::OutgoingMessage>(&sent_message.message).unwrap(),
-            p::OutgoingMessage::Registered(p::RegisteredMessage::Producer)
+            p::OutgoingMessage::Registered(p::RegisteredMessage::Producer { id: sent_message.peer_id.to_string() })
         );
     }
 
@@ -599,7 +599,7 @@ mod tests {
         assert_eq!(sent_message.peer_id, "consumer");
         assert_eq!(
             serde_json::from_str::<p::OutgoingMessage>(&sent_message.message).unwrap(),
-            p::OutgoingMessage::Registered(p::RegisteredMessage::Consumer)
+            p::OutgoingMessage::Registered(p::RegisteredMessage::Consumer { id: sent_message.peer_id.to_string()})
         );
     }
 

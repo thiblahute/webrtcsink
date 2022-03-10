@@ -7,11 +7,11 @@ use serde_derive::{Deserialize, Serialize};
 /// Confirms registration
 pub enum RegisteredMessage {
     /// Registered as a producer
-    Producer,
+    Producer { id: String },
     /// Registered as a consumer
-    Consumer,
+    Consumer { id: String },
     /// Registered as a listener
-    Listener,
+    Listener { id: String },
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
