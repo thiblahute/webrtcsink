@@ -114,9 +114,9 @@ impl SignallingServer {
 
         if let Err(err) = state
             .message_handler
-            .handle_message(&mut message_sender, msg, peer_id)
+            .handle_message(&mut message_sender, msg.as_str(), peer_id)
         {
-            warn!(this = %peer_id, "Error handling message: {:?}", err);
+            warn!(this = %peer_id, "Error handling message '{}': {:?}", msg, err);
             message_sender.send_message(
                 serde_json::to_string(&p::OutgoingMessage::Error {
                     details: err.to_string(),
@@ -194,7 +194,7 @@ impl SignallingServer {
 
                         if let Err(err) = state.message_handler.handle_message(
                             &mut message_sender,
-                            msg,
+                            msg.as_str(),
                             &this_id_clone,
                         ) {
                             warn!(this = %this_id_clone, "Error handling message: {:?}", err);
