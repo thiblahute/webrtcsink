@@ -14,11 +14,21 @@ struct Args {
     /// Port to listen on
     #[clap(short, long, default_value_t = 8443)]
     port: u16,
+
+    #[clap(short, long, help = "TLS certificate to use.")]
+    cert: Option<String>,
+
+    #[clap(long, help = "TLS certificate to password.")]
+    password: Option<String>,
 }
 
 fn main() -> Result<(), SignallingServerError> {
-    let server = SignallingServer::new(Box::new(DefaultMessageHandler::default()));
     let args = Args::parse();
+    let server = SignallingServer::new(
+        Box::new(DefaultMessageHandler::default()),
+        args.cert.clone(),
+        args.password.clone(),
+    );
 
     tracing_log::LogTracer::init().expect("Failed to set logger");
     let env_filter =

@@ -1,12 +1,14 @@
 use anyhow::Error;
+use async_native_tls::TlsAcceptor;
+use async_std::fs::File;
 use async_std::net::{TcpListener, TcpStream};
 use async_std::task;
-use async_tungstenite::tungstenite::Message as WsMessage;
+use async_tungstenite::tungstenite::{Error as WsError, Message as WsMessage};
 use futures::channel::mpsc;
 use futures::prelude::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tracing::{info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 use crate::handlers::{MessageHandler, MessageSender};
 use crate::protocol as p;
@@ -45,20 +47,34 @@ impl MessageSender for DefaultMessageSender {
 struct State {
     message_handler: Box<dyn MessageHandler>,
     message_sender: Option<DefaultMessageSender>,
+
+    certificate: Option<String>,
+    password: Option<String>,
+    tls_acceptor: Option<Arc<TlsAcceptor>>,
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum SignallingServerError {}
+pub enum SignallingServerError {
+    #[error("Invalid certificate")]
+    InvalidCertificate,
+}
 
 impl SignallingServer {
     /// Instantiate the signalling server with a MessageHandler
     /// implementation. Use DefaultMessageHandler for the default
     /// protocol, or implement your own handler
-    pub fn new(message_handler: Box<dyn MessageHandler>) -> Self {
+    pub fn new(
+        message_handler: Box<dyn MessageHandler>,
+        cert: Option<String>,
+        cert_password: Option<String>,
+    ) -> Self {
         Self {
             state: Arc::new(Mutex::new(State {
                 message_handler,
                 message_sender: Some(DefaultMessageSender::default()),
+                certificate: cert,
+                password: cert_password,
+                tls_acceptor: None,
             })),
         }
     }
@@ -100,9 +116,10 @@ impl SignallingServer {
         let mut state = self.state.lock().unwrap();
         let mut message_sender = state.message_sender.take().unwrap();
 
-        if let Err(err) = state
-            .message_handler
-            .handle_message(&mut message_sender, msg, peer_id)
+        if let Err(err) =
+            state
+                .message_handler
+                .handle_message(&mut message_sender, msg, peer_id)
         {
             warn!(this = %peer_id, "Error handling message: {:?}", err);
             message_sender.send_message(
@@ -117,19 +134,40 @@ impl SignallingServer {
         state.message_sender = Some(message_sender);
     }
 
+    async fn ws_split(
+        stream: TcpStream,
+        tls_acceptor: Option<Arc<TlsAcceptor>>,
+    ) -> Result<
+        (
+            Box<dyn Sink<WsMessage, Error = WsError> + Send + Unpin>,
+            Box<dyn Stream<Item = Result<WsMessage, WsError>> + Send + Unpin>,
+        ),
+        Error,
+    > {
+        match tls_acceptor {
+            Some(acceptor) => {
+                let (sink, stream) =
+                    async_tungstenite::accept_async(acceptor.accept(stream).await?)
+                        .await?
+                        .split();
+
+                Ok((Box::new(sink), Box::new(stream)))
+            }
+            _ => {
+                let (sink, stream) = async_tungstenite::accept_async(stream).await?.split();
+
+                Ok((Box::new(sink), Box::new(stream)))
+            }
+        }
+    }
+
     async fn accept_connection(state: Arc<Mutex<State>>, stream: TcpStream) {
         let addr = stream
             .peer_addr()
             .expect("connected streams should have a peer address");
         info!("Peer address: {}", addr);
 
-        let ws = match async_tungstenite::accept_async(stream).await {
-            Ok(ws) => ws,
-            Err(err) => {
-                warn!("Error during the websocket handshake: {}", err);
-                return;
-            }
-        };
+        let acceptor_clone = state.lock().unwrap().tls_acceptor.clone();
 
         let this_id = uuid::Uuid::new_v4().to_string();
         info!(this_id = %this_id, "New WebSocket connection: {}", addr);
@@ -139,7 +177,14 @@ impl SignallingServer {
         let (websocket_sender, mut websocket_receiver) = mpsc::channel::<String>(1000);
 
         let this_id_clone = this_id.clone();
-        let (mut ws_sink, mut ws_stream) = ws.split();
+        let (mut ws_sink, mut ws_stream) = match Self::ws_split(stream, acceptor_clone).await {
+            Ok(res) => res,
+            Err(err) => {
+                warn!("Error during the websocket handshake: {}", err);
+                return;
+            }
+        };
+
         let send_task_handle = task::spawn(async move {
             while let Some(msg) = websocket_receiver.next().await {
                 trace!(this_id = %this_id_clone, "sending {}", msg);
@@ -151,8 +196,6 @@ impl SignallingServer {
 
             Ok::<(), Error>(())
         });
-
-        {}
 
         let state_clone = state.clone();
         let this_id_clone = this_id.clone();
@@ -208,9 +251,28 @@ impl SignallingServer {
         );
     }
 
+    async fn setup_tls(&self) -> Result<(), SignallingServerError> {
+        let mut state_lock = self.state.lock().unwrap();
+        if let Some(cert) = &state_lock.certificate {
+            let key = File::open(cert.as_str())
+                .await
+                .map_err(|_| SignallingServerError::InvalidCertificate)?;
+            let acceptor =
+                TlsAcceptor::new(key, state_lock.password.as_ref().map_or("", |v| v.as_str()))
+                    .await
+                    .map_err(|_| SignallingServerError::InvalidCertificate)?;
+
+            let _ = state_lock.tls_acceptor.insert(Arc::new(acceptor));
+        }
+
+        Ok(())
+    }
+
     /// Run the server
     pub async fn run(&self, host: &str, port: u16) -> Result<(), SignallingServerError> {
         let addr = format!("{}:{}", host, port);
+
+        task::block_on(self.setup_tls())?;
 
         // Create the event loop and TCP listener we'll accept connections on.
         let try_socket = TcpListener::bind(&addr).await;
