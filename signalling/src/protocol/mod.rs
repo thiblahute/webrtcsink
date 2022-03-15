@@ -75,18 +75,30 @@ pub enum SdpMessage {
     },
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "lowercase")]
+pub struct Ice {
+    /// The candidate string
+    pub candidate: String,
+    #[serde(rename = "sdpMLineIndex")]
+    /// The mline index the candidate applies to
+    pub sdp_mline_index: u32,
+}
+
+impl Ice {
+    pub fn is_local(&self) -> bool {
+        eprintln!("==> Checking {} ===> {}", self.candidate, self.candidate.contains(".local"));
+
+        self.candidate.contains(".local")
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 /// Contents of the peer message
 pub enum PeerMessageInner {
     /// Conveys an ICE candidate
-    Ice {
-        /// The candidate string
-        candidate: String,
-        #[serde(rename = "sdpMLineIndex")]
-        /// The mline index the candidate applies to
-        sdp_mline_index: u32,
-    },
+    Ice(Ice),
     Sdp(SdpMessage),
 }
 

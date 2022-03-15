@@ -28,9 +28,19 @@ pub struct DefaultMessageHandler {
     producers: HashMap<String, HashSet<String>>,
     consumers: HashMap<String, Option<String>>,
     listeners: HashSet<String>,
+    ignore_local_ice_candidates: bool,
 }
 
 impl DefaultMessageHandler {
+    pub fn new(ignore_local_ice_candidates: bool) -> Self {
+        Self {
+            producers: Default::default(),
+            consumers: Default::default(),
+            listeners: Default::default(),
+            ignore_local_ice_candidates
+        }
+    }
+
     #[instrument(level = "debug", skip(self, sender))]
     /// End a session between two peers
     pub fn end_session(
@@ -121,20 +131,21 @@ impl DefaultMessageHandler {
     pub fn handle_ice(
         &mut self,
         sender: &mut dyn MessageSender,
-        candidate: String,
-        sdp_mline_index: u32,
+        ice: &p::Ice,
         peer_id: &str,
         other_peer_id: &str,
     ) -> Result<(), Error> {
+
+        if self.ignore_local_ice_candidates && ice.is_local() {
+            return Ok(())
+        }
+
         if let Some(consumers) = self.producers.get(peer_id) {
             if consumers.contains(other_peer_id) {
                 sender.send_message(
                     serde_json::to_string(&p::OutgoingMessage::Peer(p::PeerMessage {
                         peer_id: peer_id.to_string(),
-                        peer_message: p::PeerMessageInner::Ice {
-                            candidate,
-                            sdp_mline_index,
-                        },
+                        peer_message: p::PeerMessageInner::Ice(ice.clone()),
                     }))
                     .unwrap(),
                     other_peer_id,
@@ -152,10 +163,7 @@ impl DefaultMessageHandler {
                 sender.send_message(
                     serde_json::to_string(&p::OutgoingMessage::Peer(p::PeerMessage {
                         peer_id: peer_id.to_string(),
-                        peer_message: p::PeerMessageInner::Ice {
-                            candidate,
-                            sdp_mline_index,
-                        },
+                        peer_message: p::PeerMessageInner::Ice(ice.clone())
                     }))
                     .unwrap(),
                     other_peer_id,
@@ -460,13 +468,9 @@ impl MessageHandler for DefaultMessageHandler {
                     peer_id: other_peer_id,
                     peer_message,
                 }) => match peer_message {
-                    p::PeerMessageInner::Ice {
-                        candidate,
-                        sdp_mline_index,
-                    } => self.handle_ice(
+                    p::PeerMessageInner::Ice(ice)  => self.handle_ice(
                         sender,
-                        candidate,
-                        sdp_mline_index,
+                        &ice,
                         &peer_id,
                         &other_peer_id,
                     ),
