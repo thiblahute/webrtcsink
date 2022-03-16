@@ -533,14 +533,16 @@ impl VideoEncoder {
             self.mitigation_mode =
                 WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
         } else if bitrate < 1000000 {
-            let height = 360i32.min(self.video_info.height() as i32);
+            let height = 720i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
 
             s.set("height", height);
             s.set("width", width);
             s.remove_field("framerate");
+            s.set("framerate", self.halved_framerate);
 
-            self.mitigation_mode = WebRTCSinkMitigationMode::DOWNSCALED;
+            self.mitigation_mode =
+                WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
         } else if bitrate < 2000000 {
             let height = 720i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
@@ -563,7 +565,7 @@ impl VideoEncoder {
             .build();
 
         if !caps.is_strictly_equal(&current_caps) {
-            gst_log!(
+            gst_debug!(
                 CAT,
                 obj: element,
                 "consumer {}: setting bitrate {} and caps {} on encoder {:?}",
