@@ -9,12 +9,13 @@ repository = "https://github.com/centricular/webrtcsink/"
 build = "build.rs"
 
 [dependencies]
-gst = { package = "gstreamer", version = "0.18", features = ["v1_20", "ser_de"] }
-gst-app = { package = "gstreamer-app", version = "0.18", features = ["v1_20"] }
-gst-video = { package = "gstreamer-video", version = "0.18", features = ["v1_20", "ser_de"] }
-gst-webrtc = { package = "gstreamer-webrtc", version = "0.18", features = ["v1_20"] }
-gst-sdp = { package = "gstreamer-sdp", version = "0.18", features = ["v1_20"] }
-gst-rtp = { package = "gstreamer-rtp", version = "0.18", features = ["v1_20"] }
+gst = { git = "https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", rev="0151fed954687b03167d4a2d754623a5d2ca0755",  package="gstreamer", features = ["v1_20", "ser_de"] }
+gst-app = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", rev="0151fed954687b03167d4a2d754623a5d2ca0755", package="gstreamer-app", features = ["v1_20"] }
+gst-video = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", rev="0151fed954687b03167d4a2d754623a5d2ca0755", package="gstreamer-video", features = ["v1_20", "ser_de"] }
+gst-webrtc = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", rev="0151fed954687b03167d4a2d754623a5d2ca0755", package="gstreamer-webrtc", features = ["v1_20"] }
+gst-sdp = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", rev="0151fed954687b03167d4a2d754623a5d2ca0755", package="gstreamer-sdp", features = ["v1_20"] }
+gst-rtp = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", rev="0151fed954687b03167d4a2d754623a5d2ca0755", package="gstreamer-rtp", features = ["v1_20"] }
+
 once_cell = "1.0"
 smallvec = "1"
 anyhow = "1"
@@ -24,6 +25,7 @@ async-std = { version = "1", features = ["unstable"] }
 async-native-tls = { version = "0.4.0" }
 async-tungstenite = { version = "0.17", features = ["async-std-runtime", "async-native-tls"] }
 serde = "1"
+serde_derive = "1"
 serde_json = "1"
 fastrand = "1.0"
 webrtcsink-protocol = { version = "0.1", path="../protocol" }
