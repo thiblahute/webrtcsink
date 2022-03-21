@@ -227,6 +227,11 @@ impl Handler {
         peer_id: &str,
         other_peer_id: &str,
     ) -> Result<(), Error> {
+        if candidate.contains(".local") {
+            info!(peer_id = %peer_id, "Ignoring local candidate: {}", candidate);
+            return Ok(());
+        }
+
         if let Some(consumers) = self.producers.get(peer_id) {
             if consumers.contains(other_peer_id) {
                 self.items.push_back((
