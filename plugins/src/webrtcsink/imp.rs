@@ -140,6 +140,9 @@ struct CongestionController {
 
     min_bitrate: u32,
     max_bitrate: u32,
+
+    // Last stats information per ssrc-s
+    remote_inbound_packets_received_per_ssrc: HashMap<u32, gst::Structure>,
 }
 
 #[derive(Debug)]
@@ -155,7 +158,11 @@ enum CongestionControlOp {
     /// Don't update target bitrate
     Hold,
     /// Decrease target bitrate
-    Decrease(f64),
+    Decrease {
+        factor: f64,
+        #[allow(dead_code)]
+        reason: String // for Debug
+    },
     /// Increase target bitrate, either additively or multiplicatively
     Increase(IncreaseType),
 }
@@ -172,6 +179,8 @@ struct Consumer {
     stats: gst::Structure,
 
     max_bitrate: u32,
+
+    stats_sigid: Option<glib::SignalHandlerId>,
 }
 
 #[derive(PartialEq)]
@@ -432,18 +441,20 @@ fn setup_encoding(
     Ok((enc, conv_filter, pay))
 }
 
-fn lookup_remote_inbound_rtp_stats(stats: &gst::StructureRef) -> Option<gst::Structure> {
+fn lookup_remote_inbound_rtp_stats(stats: &gst::StructureRef) -> Vec<gst::Structure> {
+    let mut res: Vec<gst::Structure> = Default::default();
+
     for (_, field_value) in stats {
         if let Ok(s) = field_value.get::<gst::Structure>() {
             if let Ok(type_) = s.get::<gst_webrtc::WebRTCStatsType>("type") {
                 if type_ == gst_webrtc::WebRTCStatsType::RemoteInboundRtp {
-                    return Some(s);
+                    res.push(s);
                 }
             }
         }
     }
 
-    None
+    res
 }
 
 fn lookup_transport_stats(stats: &gst::StructureRef) -> Option<gst::Structure> {
@@ -601,6 +612,19 @@ impl CongestionController {
             peer_id: peer_id.to_string(),
             min_bitrate,
             max_bitrate,
+            remote_inbound_packets_received_per_ssrc: Default::default(),
+        }
+    }
+
+    fn update_loss(&mut self, loss_percentage: f64) -> CongestionControlOp {
+        if loss_percentage > 10. {
+            CongestionControlOp::Decrease {
+                factor: ((100. - (0.5 * loss_percentage)) / 100.).clamp(0.7, 0.98),
+                reason: format!("High loss: {}", loss_percentage),
+            }
+        } else {
+            /* Use other metrics and poll based stats analysis to increase the rate */
+            CongestionControlOp::Hold
         }
     }
 
@@ -616,7 +640,6 @@ impl CongestionController {
         let bitrate_sent = twcc_stats.get::<u32>("bitrate-sent").unwrap();
         let bitrate_recv = twcc_stats.get::<u32>("bitrate-recv").unwrap();
         let delta_of_delta = twcc_stats.get::<i64>("avg-delta-of-delta").unwrap();
-        let loss_percentage = twcc_stats.get::<f64>("packet-loss-pct").unwrap();
 
         let sent_minus_received = bitrate_sent.saturating_sub(bitrate_recv);
 
@@ -632,61 +655,22 @@ impl CongestionController {
         );
 
         if delay_factor > 0.1 {
-            CongestionControlOp::Decrease(if delay_factor < 0.64 {
-                gst::trace!(
-                    CAT,
-                    obj: element,
-                    "consumer {}: low delay factor {}",
-                    self.peer_id,
-                    delay_factor,
-                );
-                0.96
+            let (factor, reason) = if delay_factor < 0.64 {
+                (0.96, format!("low delay factor {}", delay_factor))
             } else {
-                gst::trace!(
-                    CAT,
-                    obj: element,
-                    "consumer {}: High delay factor",
-                    self.peer_id
-                );
-                delay_factor.sqrt().sqrt().clamp(0.8, 0.96)
-            })
-        } else if delta_of_delta > 1000000 {
-            CongestionControlOp::Decrease(if loss_percentage < 10. {
-                gst::trace!(
-                    CAT,
-                    obj: element,
-                    "consumer {}: moderate loss high delta",
-                    self.peer_id
-                );
-                0.97
-            } else {
-                gst::log!(
-                    CAT,
-                    obj: element,
-                    "consumer: {}: high loss high delta",
-                    self.peer_id
-                );
-                ((100. - loss_percentage) / 100.).clamp(0.7, 0.98)
-            })
-        } else if loss_percentage > 10. {
-            CongestionControlOp::Decrease(
-                ((100. - (0.5 * loss_percentage)) / 100.).clamp(0.7, 0.98),
-            )
-        } else if loss_percentage > 2. {
-            gst::trace!(
-                CAT,
-                obj: element,
-                "consumer {}: moderate loss",
-                self.peer_id
-            );
-            CongestionControlOp::Hold
+                (
+                    delay_factor.sqrt().sqrt().clamp(0.8, 0.96),
+                    format!("High delay factor {}", delay_factor),
+                )
+            };
+
+            CongestionControlOp::Decrease{factor, reason}
+        } else if delta_of_delta > 1_000_000 {
+            CongestionControlOp::Decrease {
+                factor: 0.97,
+                reason: format!("High delta: {}", delta_of_delta),
+            }
         } else {
-            gst::trace!(
-                CAT,
-                obj: element,
-                "consumer {}: no detected congestion",
-                self.peer_id
-            );
             CongestionControlOp::Increase(if let Some(ema) = self.bitrate_ema {
                 let bitrate_stdev = self.bitrate_emvar.sqrt();
 
@@ -779,17 +763,83 @@ impl CongestionController {
         element: &super::WebRTCSink,
         stats: &gst::StructureRef,
         encoders: &mut Vec<VideoEncoder>,
+        loss: bool,
     ) {
         let n_encoders = encoders.len() as i32;
 
-        let rtt = lookup_remote_inbound_rtp_stats(stats)
-            .and_then(|s| s.get::<f64>("round-trip-time").ok())
-            .unwrap_or(0.);
+        let inbound_rtp_stats = lookup_remote_inbound_rtp_stats(stats);
+        let mut rtt = 0.;
+        let mut fraction_lost = 0.;
+        let mut n_rtts = 0u64;
+        let mut n_fraction_losts = 0.;
+        let _ = inbound_rtp_stats
+            .iter()
+            .map(|s| {
+                s.get::<f64>("round-trip-time")
+                    .and_then(|time| {
+                        rtt += time;
+                        n_rtts += 1;
+                        Ok(())
+                    })
+                    .ok();
+
+                let ssrc = s.get::<u32>("ssrc").unwrap();
+                s.get::<f64>("fraction-lost")
+                    .and_then(|f_lost| {
+                        // Weight the number of packet lost for that ssrc by the total number of packets
+                        // received or lost since the last control
+                        let received_and_lost_pkts = s.get::<u64>("packets-received").unwrap_or(1)
+                            + s.get::<u64>("packets-lost").unwrap_or(0);
+                        let received_and_lost_packets_since_last = u64::max(
+                            self.remote_inbound_packets_received_per_ssrc
+                                .get(&ssrc)
+                                .map_or_else(
+                                    || 0,
+                                    |last_stats| {
+                                        let last_received =
+                                            last_stats.get::<u64>("packets-received").unwrap_or(0);
+                                        let last_lost =
+                                            last_stats.get::<u64>("packets-lost").unwrap_or(0);
+
+                                        received_and_lost_pkts - (last_received + last_lost)
+                                    },
+                                ),
+                            1,
+                        );
+
+                        fraction_lost += f_lost * received_and_lost_packets_since_last as f64;
+                        n_fraction_losts += received_and_lost_packets_since_last as f64;
+
+                        Ok(())
+                    })
+                    .ok();
+
+                self.remote_inbound_packets_received_per_ssrc
+                    .insert(ssrc, s.clone());
+            })
+            .collect::<()>();
+
+        fraction_lost /= n_fraction_losts;
+        let loss_percentage = fraction_lost * 100.;
+        rtt /= f64::max(1., n_rtts as f64);
+
+        gst::log!(
+            CAT,
+            "Round trip time:  {}  ({})- lost_percetage: {} ({})",
+            rtt,
+            n_rtts,
+            loss_percentage,
+            n_fraction_losts
+        );
 
         if let Some(twcc_stats) = lookup_transport_stats(stats).and_then(|transport_stats| {
             transport_stats.get::<gst::Structure>("gst-twcc-stats").ok()
         }) {
-            let control_op = self.update(element, &twcc_stats, rtt);
+            let control_op = if loss {
+                self.update_loss(loss_percentage)
+            } else {
+                self.update(element, &twcc_stats, rtt)
+            };
 
             gst::trace!(
                 CAT,
@@ -799,15 +849,16 @@ impl CongestionController {
                 control_op
             );
 
-            match control_op {
-                CongestionControlOp::Hold => (),
+            let prev_bitrate = self.target_bitrate;
+            match &control_op {
+                CongestionControlOp::Hold => {}
                 CongestionControlOp::Increase(IncreaseType::Additive(value)) => {
-                    self.clamp_bitrate(self.target_bitrate + value as i32, n_encoders);
+                    self.clamp_bitrate(self.target_bitrate + *value as i32, n_encoders);
                 }
                 CongestionControlOp::Increase(IncreaseType::Multiplicative(factor)) => {
                     self.clamp_bitrate((self.target_bitrate as f64 * factor) as i32, n_encoders);
                 }
-                CongestionControlOp::Decrease(factor) => {
+                CongestionControlOp::Decrease{factor, ..} => {
                     self.clamp_bitrate((self.target_bitrate as f64 * factor) as i32, n_encoders);
 
                     // Smoothing factor
@@ -825,6 +876,14 @@ impl CongestionController {
             }
 
             let target_bitrate = self.target_bitrate / n_encoders;
+            if target_bitrate != prev_bitrate {
+                gst::info!(
+                    CAT,
+                    "{:?} => {}",
+                    control_op,
+                    human_bytes::human_bytes(target_bitrate)
+                );
+            }
 
             let fec_ratio = {
                 if target_bitrate <= 2000000 || self.max_bitrate <= 2000000 {
@@ -920,6 +979,30 @@ impl State {
 }
 
 impl Consumer {
+    fn new(
+        pipeline: gst::Pipeline,
+        webrtcbin: gst::Element,
+        webrtc_pads: HashMap<u32, WebRTCPad>,
+        peer_id: String,
+        congestion_controller: Option<CongestionController>,
+        sdp: Option<gst_sdp::SDPMessage>,
+        stats: gst::Structure,
+        max_bitrate: u32,
+    ) -> Self {
+        Self {
+            pipeline,
+            webrtcbin,
+            webrtc_pads,
+            peer_id,
+            congestion_controller,
+            sdp,
+            stats,
+            max_bitrate,
+            encoders: Vec::new(),
+            stats_sigid: None,
+        }
+    }
+
     fn gather_stats(&self) -> gst::Structure {
         let mut ret = self.stats.to_owned();
 
@@ -1202,9 +1285,13 @@ impl NavigationEventHandler {
         gst::info!(CAT, "Creating navigation data channel");
         let channel = webrtcbin.emit_by_name::<WebRTCDataChannel>(
             "create-data-channel",
-            &[&"input", &gst::Structure::new("config", &[
-                    ("priority", &gst_webrtc::WebRTCPriorityType::High)
-                ])],
+            &[
+                &"input",
+                &gst::Structure::new(
+                    "config",
+                    &[("priority", &gst_webrtc::WebRTCPriorityType::High)],
+                ),
+            ],
         );
 
         let weak_element = element.downgrade();
@@ -1644,12 +1731,12 @@ impl WebRTCSink {
             }
         });
 
-        let mut consumer = Consumer {
-            pipeline: pipeline.clone(),
-            webrtcbin: webrtcbin.clone(),
-            webrtc_pads: HashMap::new(),
-            peer_id: peer_id.to_string(),
-            congestion_controller: match settings.cc_heuristic {
+        let mut consumer = Consumer::new(
+            pipeline.clone(),
+            webrtcbin.clone(),
+            HashMap::new(),
+            peer_id.to_string(),
+            match settings.cc_heuristic {
                 WebRTCSinkCongestionControl::Disabled => None,
                 WebRTCSinkCongestionControl::Homegrown => Some(CongestionController::new(
                     peer_id,
@@ -1657,11 +1744,40 @@ impl WebRTCSink {
                     settings.max_bitrate,
                 )),
             },
-            encoders: Vec::new(),
-            sdp: None,
-            stats: gst::Structure::new_empty("application/x-webrtc-stats"),
-            max_bitrate: settings.max_bitrate,
-        };
+            None,
+            gst::Structure::new_empty("application/x-webrtc-stats"),
+            settings.max_bitrate,
+        );
+
+
+        let rtpbin = webrtcbin
+            .dynamic_cast_ref::<gst::ChildProxy>()
+            .unwrap()
+            .child_by_name("rtpbin")
+            .unwrap();
+
+        if consumer.congestion_controller.is_some() {
+            let peer_id_str = peer_id.to_string();
+            consumer.stats_sigid = Some(rtpbin.connect_closure("on-new-ssrc", true,
+            glib::closure!(@weak-allow-none element, @weak-allow-none webrtcbin
+                            => move |rtpbin: gst::Object, session_id: u32, _src: u32| {
+                    let session = rtpbin.emit_by_name::<gst::Element>("get-session", &[&session_id]).property::<glib::Object>("internal-session");
+
+                    let element = element.expect("on-new-ssrc emited when webrtcsink has been disposed?");
+                    let webrtcbin = webrtcbin.unwrap();
+                    let mut state = element.imp().state.lock().unwrap();
+                    if let Some(mut consumer) = state.consumers.get_mut(&peer_id_str) {
+                        consumer.stats_sigid = Some(session.connect("on-feedback-rtcp",
+                            false,
+                            glib::clone!(@strong peer_id_str, @weak webrtcbin, @weak element => @default-panic, move |_| {
+                                element.imp().process_webrtcbin_stats(&element, webrtcbin, &peer_id_str, true);
+                                None
+                            })
+                        ));
+                    }
+                })
+            ));
+        }
 
         state
             .streams
@@ -1788,17 +1904,27 @@ impl WebRTCSink {
     fn process_webrtcbin_stats(
         &self,
         element: &super::WebRTCSink,
+        webrtcbin: gst::Element,
         peer_id: &str,
-        stats: &gst::StructureRef,
+        loss: bool,
     ) {
-        let mut state = self.state.lock().unwrap();
+        let peer_id = peer_id.to_string();
+        let promise = gst::Promise::with_change_func(
+            glib::clone!(@strong peer_id, @weak element => move |reply| {
+                if let Ok(Some(stats)) = reply {
 
-        if let Some(consumer) = state.consumers.get_mut(peer_id) {
-            if let Some(congestion_controller) = consumer.congestion_controller.as_mut() {
-                congestion_controller.control(element, stats, &mut consumer.encoders);
-            }
-            consumer.stats = stats.to_owned();
-        }
+                    let mut state = element.imp().state.lock().unwrap();
+                    if let Some(mut consumer) = state.consumers.get_mut(&peer_id) {
+                        if let Some(congestion_controller) = consumer.congestion_controller.as_mut() {
+                            congestion_controller.control(&element, stats, &mut consumer.encoders, loss);
+                        }
+                        consumer.stats = stats.to_owned();
+                    }
+                }
+            }),
+        );
+
+        webrtcbin.emit_by_name::<()>("get-stats", &[&None::<gst::Pad>, &promise]);
     }
 
     fn on_remote_description_set(&self, element: &super::WebRTCSink, peer_id: String) {
@@ -1854,18 +1980,15 @@ impl WebRTCSink {
                 while interval.next().await.is_some() {
                     let element_clone = element_clone.clone();
                     let peer_id_clone = peer_id_clone.clone();
-                    if let Some(webrtcbin) = webrtcbin.upgrade() {
-                        let promise = gst::Promise::with_change_func(move |reply| {
-                            if let Some(element) = element_clone.upgrade() {
-                                let this = Self::from_instance(&element);
-
-                                if let Ok(Some(stats)) = reply {
-                                    this.process_webrtcbin_stats(&element, &peer_id_clone, stats);
-                                }
-                            }
-                        });
-
-                        webrtcbin.emit_by_name::<()>("get-stats", &[&None::<gst::Pad>, &promise]);
+                    if let (Some(webrtcbin), Some(element)) =
+                        (webrtcbin.upgrade(), element_clone.upgrade())
+                    {
+                        element.imp().process_webrtcbin_stats(
+                            &element,
+                            webrtcbin,
+                            &peer_id_clone,
+                            false,
+                        );
                     } else {
                         break;
                     }
@@ -2400,6 +2523,7 @@ impl ObjectImpl for WebRTCSink {
                                         .set_bitrate(&self.instance(), consumer.max_bitrate as i32);
                                     encoder.transceiver.set_property("fec-percentage", 50u32);
                                 }
+                                consumer.stats_sigid.take();
                             }
                             WebRTCSinkCongestionControl::Homegrown => {
                                 let _ = consumer.congestion_controller.insert(
