@@ -119,14 +119,23 @@ struct VideoEncoder {
 }
 
 struct CongestionController {
-    /// Overall bitrate target for all video streams.
+    /// Note: The target bitrate applied is the min of
+    /// target_bitrate_on_delay and target_bitrate_on_loss
+    ///
+    /// Bitrate target based on delay factor for all video streams.
     /// Hasn't been tested with multiple video streams, but
     /// current design is simply to divide bitrate equally.
-    bitrate_ema: Option<f64>,
+    target_bitrate_on_delay: i32,
+
+    /// Bitrate target based on loss for all video streams.
+    /// Hasn't been tested with multiple video streams, but
+    /// current design is simply to divide bitrate equally.
+    target_bitrate_on_loss: i32,
+
     /// Exponential moving average, updated when bitrate is
     /// decreased, discarded when increased again past last
     /// congestion window. Smoothing factor hardcoded.
-    target_bitrate: i32,
+    bitrate_ema: Option<f64>,
     /// Exponentially weighted moving variance, recursively
     /// updated along with bitrate_ema. sqrt'd to obtain standard
     /// deviation, used to determine whether to increase bitrate
@@ -140,9 +149,6 @@ struct CongestionController {
 
     min_bitrate: u32,
     max_bitrate: u32,
-
-    // Last stats information per ssrc-s
-    remote_inbound_packets_received_per_ssrc: HashMap<u32, gst::Structure>,
 }
 
 #[derive(Debug)]
@@ -553,7 +559,7 @@ impl VideoEncoder {
 
             self.mitigation_mode =
                 WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
-        } else if bitrate < 2000000 {
+        } else if bitrate < 2_000_000 {
             let height = 720i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
 
@@ -605,14 +611,14 @@ impl VideoEncoder {
 impl CongestionController {
     fn new(peer_id: &str, min_bitrate: u32, max_bitrate: u32) -> Self {
         Self {
-            target_bitrate: 0,
+            target_bitrate_on_delay: 0,
+            target_bitrate_on_loss: 0,
             bitrate_ema: None,
             bitrate_emvar: 0.,
             last_update_time: None,
             peer_id: peer_id.to_string(),
             min_bitrate,
             max_bitrate,
-            remote_inbound_packets_received_per_ssrc: Default::default(),
         }
     }
 
@@ -622,9 +628,11 @@ impl CongestionController {
                 factor: ((100. - (0.5 * loss_percentage)) / 100.).clamp(0.7, 0.98),
                 reason: format!("High loss: {}", loss_percentage),
             }
+        } else if loss_percentage > 2. {
+            CongestionControlOp::Hold
         } else {
             /* Use other metrics and poll based stats analysis to increase the rate */
-            CongestionControlOp::Hold
+            CongestionControlOp::Increase(IncreaseType::Multiplicative(1.05))
         }
     }
 
@@ -634,7 +642,7 @@ impl CongestionController {
         twcc_stats: &gst::StructureRef,
         rtt: f64,
     ) -> CongestionControlOp {
-        let target_bitrate = self.target_bitrate as f64;
+        let target_bitrate = f64::min(self.target_bitrate_on_delay as f64, self.target_bitrate_on_loss as f64);
         // Unwrap, all those fields must be there or there's been an API
         // break, which qualifies as programming error
         let bitrate_sent = twcc_stats.get::<u32>("bitrate-sent").unwrap();
@@ -751,11 +759,18 @@ impl CongestionController {
         }
     }
 
-    fn clamp_bitrate(&mut self, bitrate: i32, n_encoders: i32) {
-        self.target_bitrate = bitrate.clamp(
-            self.min_bitrate as i32 * n_encoders,
-            self.max_bitrate as i32 * n_encoders,
-        );
+    fn clamp_bitrate(&mut self, bitrate: i32, n_encoders: i32, loss: bool) {
+        if loss {
+            self.target_bitrate_on_loss = bitrate.clamp(
+                self.min_bitrate as i32 * n_encoders,
+                self.max_bitrate as i32 * n_encoders,
+            );
+        } else {
+            self.target_bitrate_on_delay = bitrate.clamp(
+                self.min_bitrate as i32 * n_encoders,
+                self.max_bitrate as i32 * n_encoders,
+            );
+        }
     }
 
     fn control(
@@ -769,7 +784,7 @@ impl CongestionController {
 
         let inbound_rtp_stats = lookup_remote_inbound_rtp_stats(stats);
         let mut rtt = 0.;
-        let mut fraction_lost = 0.;
+        let mut sum_fraction_lost = 0.;
         let mut n_rtts = 0u64;
         let mut n_fraction_losts = 0.;
         let _ = inbound_rtp_stats
@@ -783,49 +798,22 @@ impl CongestionController {
                     })
                     .ok();
 
-                let ssrc = s.get::<u32>("ssrc").unwrap();
                 s.get::<f64>("fraction-lost")
                     .and_then(|f_lost| {
-                        // Weight the number of packet lost for that ssrc by the total number of packets
-                        // received or lost since the last control
-                        let received_and_lost_pkts = s.get::<u64>("packets-received").unwrap_or(1)
-                            + s.get::<u64>("packets-lost").unwrap_or(0);
-                        let received_and_lost_packets_since_last = u64::max(
-                            self.remote_inbound_packets_received_per_ssrc
-                                .get(&ssrc)
-                                .map_or_else(
-                                    || 0,
-                                    |last_stats| {
-                                        let last_received =
-                                            last_stats.get::<u64>("packets-received").unwrap_or(0);
-                                        let last_lost =
-                                            last_stats.get::<u64>("packets-lost").unwrap_or(0);
-
-                                        received_and_lost_pkts - (last_received + last_lost)
-                                    },
-                                ),
-                            1,
-                        );
-
-                        fraction_lost += f_lost * received_and_lost_packets_since_last as f64;
-                        n_fraction_losts += received_and_lost_packets_since_last as f64;
-
+                        sum_fraction_lost += f_lost;
+                        n_fraction_losts += 1.;
                         Ok(())
                     })
                     .ok();
-
-                self.remote_inbound_packets_received_per_ssrc
-                    .insert(ssrc, s.clone());
             })
             .collect::<()>();
 
-        fraction_lost /= n_fraction_losts;
-        let loss_percentage = fraction_lost * 100.;
+        let loss_percentage = (sum_fraction_lost / n_fraction_losts) * 100.;
         rtt /= f64::max(1., n_rtts as f64);
 
         gst::log!(
             CAT,
-            "Round trip time:  {}  ({})- lost_percetage: {} ({})",
+            "Round trip time:  {}  ({})- loss_percentage: {} ({})",
             rtt,
             n_rtts,
             loss_percentage,
@@ -849,38 +837,43 @@ impl CongestionController {
                 control_op
             );
 
-            let prev_bitrate = self.target_bitrate;
+            let prev_bitrate = i32::min(self.target_bitrate_on_delay, self.target_bitrate_on_loss);
             match &control_op {
                 CongestionControlOp::Hold => {}
                 CongestionControlOp::Increase(IncreaseType::Additive(value)) => {
-                    self.clamp_bitrate(self.target_bitrate + *value as i32, n_encoders);
+                    self.clamp_bitrate(self.target_bitrate_on_delay + *value as i32, n_encoders, loss);
                 }
                 CongestionControlOp::Increase(IncreaseType::Multiplicative(factor)) => {
-                    self.clamp_bitrate((self.target_bitrate as f64 * factor) as i32, n_encoders);
+                    self.clamp_bitrate((self.target_bitrate_on_delay as f64 * factor) as i32, n_encoders, loss);
                 }
                 CongestionControlOp::Decrease{factor, ..} => {
-                    self.clamp_bitrate((self.target_bitrate as f64 * factor) as i32, n_encoders);
+                    self.clamp_bitrate((self.target_bitrate_on_delay as f64 * factor) as i32, n_encoders, loss);
 
                     // Smoothing factor
                     let alpha = 0.75;
                     if let Some(ema) = self.bitrate_ema {
-                        let sigma: f64 = (self.target_bitrate as f64) - ema;
+                        let sigma: f64 = (self.target_bitrate_on_delay as f64) - ema;
                         self.bitrate_ema = Some(ema + (alpha * sigma));
                         self.bitrate_emvar =
                             (1. - alpha) * (self.bitrate_emvar + alpha * sigma.powi(2));
                     } else {
-                        self.bitrate_ema = Some(self.target_bitrate as f64);
+                        self.bitrate_ema = Some(self.target_bitrate_on_delay as f64);
                         self.bitrate_emvar = 0.;
                     }
                 }
             }
 
-            let target_bitrate = self.target_bitrate / n_encoders;
+            let target_bitrate = i32::min(self.target_bitrate_on_delay, self.target_bitrate_on_loss).clamp(
+                self.min_bitrate as i32 * n_encoders,
+                self.max_bitrate as i32 * n_encoders,
+            ) / n_encoders;
+
             if target_bitrate != prev_bitrate {
                 gst::info!(
                     CAT,
-                    "{:?} => {}",
+                    "{:?} {} => {}",
                     control_op,
+                    human_bytes::human_bytes(prev_bitrate),
                     human_bytes::human_bytes(target_bitrate)
                 );
             }
@@ -1185,7 +1178,8 @@ impl Consumer {
             );
 
             if let Some(congestion_controller) = self.congestion_controller.as_mut() {
-                congestion_controller.target_bitrate += enc.bitrate();
+                congestion_controller.target_bitrate_on_delay += enc.bitrate();
+                congestion_controller.target_bitrate_on_loss = congestion_controller.target_bitrate_on_delay;
                 enc.transceiver.set_property("fec-percentage", 0u32);
             } else {
                 /* If congestion control is disabled, we simply use the highest
