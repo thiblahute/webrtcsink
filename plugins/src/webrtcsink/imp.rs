@@ -538,34 +538,49 @@ impl VideoEncoder {
 
         // Hardcoded thresholds, may be tuned further in the future, and
         // adapted according to the codec in use
-        if bitrate < 500000 {
+        if bitrate < 100_000 {
             let height = 360i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
 
             s.set("height", height);
             s.set("width", width);
-            s.set("framerate", self.halved_framerate);
+            s.set("framerate", gst::Fraction::new(2, 1));
 
             self.mitigation_mode =
                 WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
-        } else if bitrate < 1000000 {
+        } else if bitrate < 200_000 {
+            let height = 360i32.min(self.video_info.height() as i32);
+            let width = self.scale_height_round_2(height);
+
+            s.set("height", height);
+            s.set("width", width);
+            s.set("framerate", gst::Fraction::new(5, 1));
+
+            self.mitigation_mode =
+                WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
+        } else if bitrate < 500_000 {
+            let height = 360i32.min(self.video_info.height() as i32);
+            let width = self.scale_height_round_2(height);
+
+            s.set("height", height);
+            s.set("width", width);
+            s.set("framerate", self.halved_framerate.mul(gst::Fraction::new(1, 2)));
+
+            self.mitigation_mode =
+                WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
+        } else if bitrate < 1_000_000 {
             let height = 720i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
 
             s.set("height", height);
             s.set("width", width);
             s.remove_field("framerate");
-            s.set("framerate", self.halved_framerate);
+            s.set("framerate", self.halved_framerate.mul(gst::Fraction::new(1,2)));
 
             self.mitigation_mode =
                 WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
         } else if bitrate < 2_000_000 {
-            let height = 720i32.min(self.video_info.height() as i32);
-            let width = self.scale_height_round_2(height);
-
-            s.set("height", height);
-            s.set("width", width);
-            s.remove_field("framerate");
+            s.set("framerate", self.halved_framerate);
 
             self.mitigation_mode = WebRTCSinkMitigationMode::DOWNSCALED;
         } else {
