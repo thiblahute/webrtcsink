@@ -576,7 +576,7 @@ impl VideoEncoder {
 
         // Hardcoded thresholds, may be tuned further in the future, and
         // adapted according to the codec in use
-        if bitrate < 500000 {
+        if bitrate < 500_000 {
             let height = 360i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
 
@@ -586,21 +586,23 @@ impl VideoEncoder {
 
             self.mitigation_mode =
                 WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
-        } else if bitrate < 1000000 {
-            let height = 360i32.min(self.video_info.height() as i32);
-            let width = self.scale_height_round_2(height);
-
-            s.set("height", height);
-            s.set("width", width);
-            s.remove_field("framerate");
-
-            self.mitigation_mode = WebRTCSinkMitigationMode::DOWNSCALED;
-        } else if bitrate < 2000000 {
+        } else if bitrate < 1_000_000 {
             let height = 720i32.min(self.video_info.height() as i32);
             let width = self.scale_height_round_2(height);
 
             s.set("height", height);
             s.set("width", width);
+            s.set("framerate", self.halved_framerate.mul(gst::Fraction::new(1, 2)));
+
+            self.mitigation_mode =
+                WebRTCSinkMitigationMode::DOWNSAMPLED | WebRTCSinkMitigationMode::DOWNSCALED;
+        } else if bitrate < 2_000_000 {
+            let height = 720i32.min(self.video_info.height() as i32);
+            let width = self.scale_height_round_2(height);
+
+            s.set("height", height);
+            s.set("width", width);
+
             s.remove_field("framerate");
 
             self.mitigation_mode = WebRTCSinkMitigationMode::DOWNSCALED;
@@ -697,10 +699,25 @@ impl CongestionController {
                 )
             };
 
-            CongestionControlOp::Decrease { factor, reason }
-        } else if delta_of_delta > 1_000_000 {
+            CongestionControlOp::Decrease{factor, reason}
+        } else if delta_of_delta > 5_000_000 {
             CongestionControlOp::Decrease {
                 factor: 0.97,
+                reason: format!("very Very high delta: {}", delta_of_delta),
+            }
+        } else if delta_of_delta > 3_000_000 {
+            CongestionControlOp::Decrease {
+                factor: 0.99,
+                reason: format!("Very high delta: {}", delta_of_delta),
+            }
+        } else if delta_of_delta > 2_000_000 {
+            CongestionControlOp::Decrease {
+                factor: 0.99,
+                reason: format!("High delta: {}", delta_of_delta),
+            }
+        } else if delta_of_delta > 1_000_000 {
+            CongestionControlOp::Decrease {
+                factor: 0.995,
                 reason: format!("High delta: {}", delta_of_delta),
             }
         } else {
