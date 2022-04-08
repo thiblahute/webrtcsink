@@ -688,9 +688,19 @@ impl CongestionController {
             };
 
             CongestionControlOp::Decrease{factor, reason}
-        } else if delta_of_delta > 1_000_000 {
+        } else if delta_of_delta > 3_000_000 {
             CongestionControlOp::Decrease {
                 factor: 0.97,
+                reason: format!("Very high delta: {}", delta_of_delta),
+            }
+        } else if delta_of_delta > 2_000_000 {
+            CongestionControlOp::Decrease {
+                factor: 0.98,
+                reason: format!("Very high delta: {}", delta_of_delta),
+            }
+        } else if delta_of_delta > 1_000_000 {
+            CongestionControlOp::Decrease {
+                factor: 0.99,
                 reason: format!("High delta: {}", delta_of_delta),
             }
         } else {
