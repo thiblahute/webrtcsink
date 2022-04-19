@@ -968,9 +968,9 @@ impl State {
         }
     }
 
-    fn maybe_start_signaller(&mut self, element: &super::WebRTCSink) {
+    fn maybe_start_signaller(&mut self, element: &super::WebRTCSink, started_playing: bool) {
         if self.signaller_state == SignallerState::Stopped
-            && element.current_state() == gst::State::Playing
+            && (element.current_state() == gst::State::Playing || started_playing)
             && self.codec_discovery_done
         {
             if let Err(err) = self.signaller.start(element) {
@@ -2372,7 +2372,7 @@ impl WebRTCSink {
                                     Ok(Ok(_)) => {
                                         let mut state = this.state.lock().unwrap();
                                         state.codec_discovery_done = true;
-                                        state.maybe_start_signaller(&element);
+                                        state.maybe_start_signaller(&element, false);
                                     }
                                     _ => (),
                                 }
@@ -2846,7 +2846,7 @@ impl ElementImpl for WebRTCSink {
             }
             gst::StateChange::PausedToPlaying => {
                 let mut state = self.state.lock().unwrap();
-                state.maybe_start_signaller(element);
+                state.maybe_start_signaller(element, true);
             }
             _ => (),
         }
