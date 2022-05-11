@@ -1,6 +1,6 @@
 use gst::glib;
 use gst::prelude::*;
-use gst::subclass::prelude::ObjectSubclassExt;
+use gst::subclass::prelude::*;
 use std::error::Error;
 
 mod imp;
@@ -133,8 +133,8 @@ impl WebRTCSink {
 pub enum WebRTCSinkCongestionControl {
     #[enum_value(name = "Disabled: no congestion control is applied", nick = "disabled")]
     Disabled,
-    #[enum_value(name = "Homegrown: simple sender-side heuristic", nick = "homegrown")]
-    Homegrown,
+    #[enum_value(name = "Google Congestion Control algorithm", nick = "gcc")]
+    GoogleCongestionControl,
 }
 
 #[glib::flags(name = "GstWebRTCSinkMitigationMode")]
