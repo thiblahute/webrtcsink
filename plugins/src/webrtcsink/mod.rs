@@ -1,13 +1,17 @@
 use gst::glib;
 use gst::prelude::*;
-use gst::subclass::prelude::ObjectSubclassExt;
+use gst::subclass::prelude::*;
 use std::error::Error;
 
+mod gcc;
 mod imp;
 
 glib::wrapper! {
     pub struct WebRTCSink(ObjectSubclass<imp::WebRTCSink>) @extends gst::Bin, gst::Element, gst::Object, @implements gst::ChildProxy, gst_video::Navigation;
 }
+
+type Bitrate = u32;
+
 
 unsafe impl Send for WebRTCSink {}
 unsafe impl Sync for WebRTCSink {}
@@ -124,6 +128,37 @@ impl WebRTCSink {
         let ws = imp::WebRTCSink::from_instance(self);
 
         ws.remove_consumer(self, peer_id, false)
+    }
+}
+
+glib::wrapper! {
+    pub struct RateController(ObjectSubclass<gcc::RateController>) @extends gst::Object;
+}
+
+unsafe impl Send for RateController {}
+unsafe impl Sync for RateController {}
+
+impl RateController {
+    pub fn new(
+        webrtcbin: &gst::Element,
+        min_bitrate: Bitrate,
+        start_bitrate: Bitrate,
+        max_bitrate: Bitrate,
+    ) -> Self {
+        let this: RateController = glib::Object::new(&[]).unwrap();
+
+        let controller = this.imp();
+        controller.start(&this, webrtcbin, min_bitrate, start_bitrate, max_bitrate);
+
+        this
+    }
+
+    pub fn stop(&mut self) {
+        self.imp().stop();
+    }
+
+    pub fn bitrate(&self) -> i32{
+        self.imp().bitrate()
     }
 }
 

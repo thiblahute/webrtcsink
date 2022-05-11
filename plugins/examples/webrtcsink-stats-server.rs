@@ -112,7 +112,7 @@ async fn run(args: Args) -> Result<(), Error> {
     info!("Listening on: {}", addr);
 
     let pipeline_str = format!(
-        "webrtcsink name=ws do-retransmission={} do-fec={} congestion-control={} \
+        "webrtcsink name=ws do-retransmission={} do-fec={} congestion-control={} \"signaller::address=ws://stream-test-backend.womp.xyz:5002\" \
                                 uridecodebin name=d uri={} \
                                 d. ! video/x-raw ! queue ! ws.video_0 \
                                 d. ! audio/x-raw ! queue ! ws.audio_0",

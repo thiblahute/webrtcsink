@@ -203,6 +203,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "065374052e7df7ee4047b1160cca5e1467a12351a40b3da123c870ba0b8eda2a"
 
 [[package]]
+name = "atomic_refcell"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73b5e5f48b927f04e952dedc932f31995a65a0bf65ec971c74436e51bf6e970d"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -308,6 +314,7 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
+ "time",
  "winapi",
 ]
 
@@ -413,6 +420,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "debug-ignore"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e51694c5f8b91baf933e6429a3df4ff3e9f1160386d150790b97bef73337d1b"
 
 [[package]]
 name = "digest"
@@ -1566,6 +1579,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "time"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca8a50ef2360fbd1eeb0ecd46795a87a19024eb4b53c5dc916ca1fd95fe62438"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "tinyvec"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1856,7 +1879,10 @@ dependencies = [
  "async-native-tls 0.4.0",
  "async-std",
  "async-tungstenite",
+ "atomic_refcell",
+ "chrono",
  "clap",
+ "debug-ignore",
  "fastrand",
  "futures",
  "gst-plugin-version-helper",
