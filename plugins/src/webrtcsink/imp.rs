@@ -130,6 +130,7 @@ pub struct VideoEncoder {
     video_info: gst_video::VideoInfo,
     peer_id: String,
     mitigation_mode: WebRTCSinkMitigationMode,
+    mitigation_reason: Option<String>,
     transceiver: gst_webrtc::WebRTCRTPTransceiver,
 }
 
@@ -453,6 +454,7 @@ impl VideoEncoder {
             video_info,
             peer_id: peer_id.to_string(),
             mitigation_mode: WebRTCSinkMitigationMode::NONE,
+            mitigation_reason: None,
             transceiver,
         }
     }
@@ -481,7 +483,7 @@ impl VideoEncoder {
         (width + 1) & !1
     }
 
-    pub fn set_bitrate(&mut self, element: &super::WebRTCSink, bitrate: i32) {
+    pub fn set_bitrate(&mut self, element: &super::WebRTCSink, bitrate: i32, reason: &Option<String>) {
         match self.factory_name.as_str() {
             "vp8enc" | "vp9enc" => self.element.set_property("target-bitrate", bitrate),
             "x264enc" | "nvh264enc" | "vaapih264enc" | "vaapivp8enc" => self
@@ -531,6 +533,7 @@ impl VideoEncoder {
             self.mitigation_mode = WebRTCSinkMitigationMode::NONE;
         }
 
+        self.mitigation_reason = reason.clone();
         let caps = gst::Caps::builder_full_with_any_features()
             .structure(s)
             .build();
@@ -554,6 +557,7 @@ impl VideoEncoder {
         gst::Structure::builder("application/x-webrtcsink-video-encoder-stats")
             .field("bitrate", self.bitrate())
             .field("mitigation-mode", self.mitigation_mode)
+            .field("mitigation-reason", self.mitigation_reason.as_ref().unwrap_or(&"".to_string()))
             .field("codec-name", self.codec_name.as_str())
             .field(
                 "fec-percentage",
@@ -840,7 +844,7 @@ impl Consumer {
                 WebRTCSinkCongestionControl::Disabled => {
                     // If congestion control is disabled, we simply use the highest
                     // known "safe" value for the bitrate.
-                    enc.set_bitrate(element, (self.cc_info.max_bitrate as f64 / 1.5) as i32);
+                    enc.set_bitrate(element, (self.cc_info.max_bitrate as f64 / 1.5) as i32, &None);
                     enc.transceiver.set_property("fec-percentage", 50u32);
                 }
                 _ => enc.transceiver.set_property("fec-percentage", 0u32),
@@ -1308,7 +1312,9 @@ impl WebRTCSink {
                             glib::clone!(@weak element, @strong peer_id
                                 => move |bwe, pspec| {
                                 element.imp().set_bitrate(&element, &peer_id,
-                                    bwe.property::<u32>(pspec.name()));
+                                    bwe.property::<u32>(pspec.name()),
+                                    bwe.property::<Option<String>>("limitation-reason")
+                                );
                             }
                         ));
 
@@ -1567,7 +1573,7 @@ impl WebRTCSink {
         Ok(())
     }
 
-    fn set_bitrate(&self, element: &super::WebRTCSink, peer_id: &str, bitrate: u32) {
+    fn set_bitrate(&self, element: &super::WebRTCSink, peer_id: &str, bitrate: u32, reason: Option<String>) {
         let mut state = element.imp().state.lock().unwrap();
 
         if let Some(consumer) = state.consumers.get_mut(peer_id) {
@@ -1585,7 +1591,7 @@ impl WebRTCSink {
             let fec_percentage = fec_ratio * 50f64;
             let encoders_bitrate = ((bitrate as f64) / (1. + (fec_percentage / 100.))) as i32;
             for encoder in consumer.encoders.iter_mut() {
-                encoder.set_bitrate(element, encoders_bitrate);
+                encoder.set_bitrate(element, encoders_bitrate, &reason);
                 encoder
                     .transceiver
                     .set_property("fec-percentage", fec_percentage as u32);

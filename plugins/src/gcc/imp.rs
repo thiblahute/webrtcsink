@@ -1197,6 +1197,13 @@ impl ObjectImpl for BandwidthEstimator {
                     DEFAULT_MAX_BITRATE,
                     glib::ParamFlags::READWRITE | gst::PARAM_FLAG_MUTABLE_READY,
                 ),
+                glib::ParamSpecString::new(
+                    "limitation-reason",
+                    "Limitation Reason",
+                    "Human readable reason for bitrate limitation",
+                    None,
+                    glib::ParamFlags::READABLE,
+                ),
             ]
         });
 
@@ -1235,6 +1242,17 @@ impl ObjectImpl for BandwidthEstimator {
             "min-bitrate" => {
                 let state = self.state.lock().unwrap();
                 state.min_bitrate.to_value()
+            }
+            "limitation-reason" => {
+                let state = self.state.lock().unwrap();
+
+                if state.estimated_bitrate == state.max_bitrate {
+                    None::<String>.to_value()
+                } else if state.target_bitrate_on_delay <= state.target_bitrate_on_loss {
+                    "Unstable connection or low bandwidth detected".to_value()
+                } else {
+                    "High packet loss detected".to_value()
+                }
             }
             "max-bitrate" => {
                 let state = self.state.lock().unwrap();
