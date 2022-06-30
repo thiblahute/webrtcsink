@@ -770,8 +770,8 @@ impl State {
         if effective_bitrate as f64 - target_bitrate as f64 > 100. * 1000. {
             gst::info!(
                 CAT,
-                "Effective rate{} >> target bitrate {} - we should avoid that"
-                " as much as possible fine tuning the encoder",
+                "Effective rate{} >> target bitrate {} - we should avoid that \
+                 as much as possible fine tuning the encoder",
                 human_kbits(effective_bitrate),
                 human_kbits(target_bitrate)
             );

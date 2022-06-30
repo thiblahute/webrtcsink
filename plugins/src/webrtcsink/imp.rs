@@ -132,6 +132,7 @@ pub struct VideoEncoder {
     mitigation_mode: WebRTCSinkMitigationMode,
     mitigation_reason: Option<String>,
     transceiver: gst_webrtc::WebRTCRTPTransceiver,
+    do_fec: bool,
 }
 
 struct Consumer {
@@ -144,6 +145,7 @@ struct Consumer {
     /// None if congestion control was disabled
     sdp: Option<gst_sdp::SDPMessage>,
     stats: gst::Structure,
+    do_fec: bool,
 
     cc_info: CCInfo,
 
@@ -213,7 +215,7 @@ impl Default for Settings {
             cc_info: CCInfo {
                 heuristic: WebRTCSinkCongestionControl::GoogleCongestionControl,
                 min_bitrate: DEFAULT_MIN_BITRATE,
-                max_bitrate: (DEFAULT_MAX_BITRATE as f64 * 1.5) as u32,
+                max_bitrate: (DEFAULT_MAX_BITRATE) as u32,
                 start_bitrate: DEFAULT_START_BITRATE,
             },
             do_fec: DEFAULT_DO_FEC,
@@ -443,6 +445,7 @@ impl VideoEncoder {
         peer_id: &str,
         codec_name: &str,
         transceiver: gst_webrtc::WebRTCRTPTransceiver,
+        do_fec: bool,
     ) -> Self {
         let halved_framerate = video_info.fps().mul(gst::Fraction::new(1, 2));
 
@@ -457,6 +460,7 @@ impl VideoEncoder {
             mitigation_mode: WebRTCSinkMitigationMode::NONE,
             mitigation_reason: None,
             transceiver,
+            do_fec,
         }
     }
 
@@ -562,7 +566,7 @@ impl VideoEncoder {
             .field("codec-name", self.codec_name.as_str())
             .field(
                 "fec-percentage",
-                self.transceiver.property::<u32>("fec-percentage"),
+                if self.do_fec {self.transceiver.property::<u32>("fec-percentage")} else {0u32},
             )
             .build()
     }
@@ -641,6 +645,7 @@ impl Consumer {
         webrtcbin: gst::Element,
         peer_id: String,
         cc_info: CCInfo,
+        do_fec: bool,
     ) -> Self {
         Self {
             pipeline,
@@ -653,6 +658,7 @@ impl Consumer {
             webrtc_pads: HashMap::new(),
             encoders: Vec::new(),
             links: HashMap::new(),
+            do_fec,
         }
     }
 
@@ -840,13 +846,14 @@ impl Consumer {
                 &self.peer_id,
                 codec.caps.structure(0).unwrap().name(),
                 transceiver,
+                self.do_fec,
             );
 
             match self.cc_info.heuristic {
                 WebRTCSinkCongestionControl::Disabled => {
                     // If congestion control is disabled, we simply use the highest
                     // known "safe" value for the bitrate.
-                    enc.set_bitrate(element, (self.cc_info.max_bitrate as f64 / 1.5) as i32, &None);
+                    enc.set_bitrate(element, (self.cc_info.max_bitrate) as i32, &None);
                     enc.transceiver.set_property("fec-percentage", 50u32);
                 }
                 _ => enc.transceiver.set_property("fec-percentage", 0u32),
@@ -1462,6 +1469,7 @@ impl WebRTCSink {
             webrtcbin.clone(),
             peer_id.clone(),
             settings.cc_info,
+            settings.do_fec,
         );
 
         state
@@ -1605,9 +1613,11 @@ impl WebRTCSink {
 
         if let Some(consumer) = state.consumers.get_mut(peer_id) {
             let fec_ratio = {
-                // Start adding some FEC when the bitrate > 2Mbps as we found experimentally
-                // that it is not worth it below that threshold
-                if bitrate <= 2_000_000 || consumer.cc_info.max_bitrate <= 2_000_000 {
+                if !self.settings.lock().unwrap().do_fec {
+                    0f64
+                } else if bitrate <= 2_000_000 || consumer.cc_info.max_bitrate <= 2_000_000 {
+                    // Start adding some FEC when the bitrate > 2Mbps as we found experimentally
+                    // that it is not worth it below that threshold
                     0f64
                 } else {
                     (bitrate as f64 - 2_000_000.)
@@ -2241,13 +2251,7 @@ impl ObjectImpl for WebRTCSink {
             }
             "max-bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
-                settings.cc_info.max_bitrate = (value.get::<u32>().expect("type checked upstream")
-                    as f32
-                    * if settings.do_fec {
-                        settings.cc_info.max_bitrate as f32 * 1.5
-                    } else {
-                        1.
-                    }) as u32;
+                settings.cc_info.max_bitrate = value.get::<u32>().expect("type checked upstream");
             }
             "start-bitrate" => {
                 let mut settings = self.settings.lock().unwrap();
@@ -2304,9 +2308,7 @@ impl ObjectImpl for WebRTCSink {
             }
             "max-bitrate" => {
                 let settings = self.settings.lock().unwrap();
-                ((settings.cc_info.max_bitrate as f32 / if settings.do_fec { 1.5 } else { 1. })
-                    as u32)
-                    .to_value()
+                settings.cc_info.max_bitrate.to_value()
             }
             "start-bitrate" => {
                 let settings = self.settings.lock().unwrap();
