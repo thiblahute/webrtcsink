@@ -707,7 +707,6 @@ impl Default for State {
 
 impl State {
     // 4. sending engine implementing a "leaky bucket"
-    // FIXME: Implement "stuffing"
     fn create_buffer_list(&mut self, bwe: &super::BandwidthEstimator) -> gst::BufferList {
         let now = time::Instant::now();
         let elapsed = Duration::from_std(now - self.last_push).unwrap();
@@ -767,6 +766,16 @@ impl State {
                 (now - prev).as_millis() as f64
             }
         };
+
+        if effective_bitrate as f64 - target_bitrate as f64 > 100. * 1000. {
+            gst::info!(
+                CAT,
+                "Effective rate{} >> target bitrate {} - we should avoid that"
+                " as much as possible fine tuning the encoder",
+                human_kbits(effective_bitrate),
+                human_kbits(target_bitrate)
+            );
+        }
 
         self.last_increase_on_delay = Some(now);
         if self.ema.estimate_is_close(effective_bitrate) {

@@ -137,6 +137,7 @@ pub struct VideoEncoder {
 struct Consumer {
     pipeline: gst::Pipeline,
     webrtcbin: gst::Element,
+    rtprtxsend: Option<gst::Element>,
     webrtc_pads: HashMap<u32, WebRTCPad>,
     peer_id: String,
     encoders: Vec<VideoEncoder>,
@@ -646,6 +647,7 @@ impl Consumer {
             webrtcbin,
             peer_id,
             cc_info,
+            rtprtxsend: None,
             stats: gst::Structure::new_empty("application/x-webrtc-stats"),
             sdp: None,
             webrtc_pads: HashMap::new(),
@@ -1321,6 +1323,23 @@ impl WebRTCSink {
                         Some(cc)
                     }),
                 );
+
+                webrtcbin.connect_closure(
+                    "deep-element-added",
+                    false,
+                    glib::closure!(@watch element, @strong peer_id
+                            => move |_webrtcbin: gst::Element, _bin: gst::Bin, e: gst::Element| {
+
+                        if e.factory().map_or(false, |f| f.name() == "rtprtxsend") {
+                            if e.has_property("stuffing-kbps", Some(i32::static_type())) {
+                                element.imp().set_rtptrxsend(&element, &peer_id, e);
+                            } else {
+                                gst::warning!(CAT, "rtprtxsend doesn't have a `stuffing-kbps`
+                                    property, stuffing disabled");
+                            }
+                        }
+                    }),
+                );
             }
         }
 
@@ -1573,6 +1592,14 @@ impl WebRTCSink {
         Ok(())
     }
 
+    fn set_rtptrxsend(&self, element: &super::WebRTCSink, peer_id: &str, rtprtxsend: gst::Element) {
+        let mut state = element.imp().state.lock().unwrap();
+
+        if let Some(consumer) = state.consumers.get_mut(peer_id) {
+            consumer.rtprtxsend = Some(rtprtxsend);
+        }
+    }
+
     fn set_bitrate(&self, element: &super::WebRTCSink, peer_id: &str, bitrate: u32, reason: Option<String>) {
         let mut state = element.imp().state.lock().unwrap();
 
@@ -1590,6 +1617,11 @@ impl WebRTCSink {
 
             let fec_percentage = fec_ratio * 50f64;
             let encoders_bitrate = ((bitrate as f64) / (1. + (fec_percentage / 100.))) as i32;
+
+            if let Some(ref rtpxsend) = consumer.rtprtxsend.as_ref() {
+                rtpxsend.set_property("stuffing-kbps", (bitrate as f64 / 1000.) as i32);
+            }
+
             for encoder in consumer.encoders.iter_mut() {
                 encoder.set_bitrate(element, encoders_bitrate, &reason);
                 encoder
