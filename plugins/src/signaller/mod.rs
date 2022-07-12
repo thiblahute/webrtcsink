@@ -6,15 +6,15 @@ use std::error::Error;
 mod imp;
 
 glib::wrapper! {
-    pub struct Signaller(ObjectSubclass<imp::Signaller>);
+    pub struct SinkSignaller(ObjectSubclass<imp::SinkSignaller>);
 }
 
-unsafe impl Send for Signaller {}
-unsafe impl Sync for Signaller {}
+unsafe impl Send for SinkSignaller {}
+unsafe impl Sync for SinkSignaller {}
 
-impl Signallable for Signaller {
+impl Signallable for SinkSignaller {
     fn start(&mut self, element: &WebRTCSink) -> Result<(), Box<dyn Error>> {
-        let signaller = imp::Signaller::from_instance(self);
+        let signaller = imp::SinkSignaller::from_instance(self);
         signaller.start(element);
 
         Ok(())
@@ -26,7 +26,7 @@ impl Signallable for Signaller {
         peer_id: &str,
         sdp: &gst_webrtc::WebRTCSessionDescription,
     ) -> Result<(), Box<dyn Error>> {
-        let signaller = imp::Signaller::from_instance(self);
+        let signaller = imp::SinkSignaller::from_instance(self);
         signaller.handle_sdp(element, peer_id, sdp);
         Ok(())
     }
@@ -39,23 +39,23 @@ impl Signallable for Signaller {
         sdp_mline_index: Option<u32>,
         sdp_mid: Option<String>,
     ) -> Result<(), Box<dyn Error>> {
-        let signaller = imp::Signaller::from_instance(self);
+        let signaller = imp::SinkSignaller::from_instance(self);
         signaller.handle_ice(element, peer_id, candidate, sdp_mline_index, sdp_mid);
         Ok(())
     }
 
     fn stop(&mut self, element: &WebRTCSink) {
-        let signaller = imp::Signaller::from_instance(self);
+        let signaller = imp::SinkSignaller::from_instance(self);
         signaller.stop(element);
     }
 
     fn consumer_removed(&mut self, element: &WebRTCSink, peer_id: &str) {
-        let signaller = imp::Signaller::from_instance(self);
+        let signaller = imp::SinkSignaller::from_instance(self);
         signaller.consumer_removed(element, peer_id);
     }
 }
 
-impl Default for Signaller {
+impl Default for SinkSignaller {
     fn default() -> Self {
         glib::Object::new(&[]).unwrap()
     }

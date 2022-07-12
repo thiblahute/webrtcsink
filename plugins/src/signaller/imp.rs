@@ -46,12 +46,12 @@ impl Default for Settings {
 }
 
 #[derive(Default)]
-pub struct Signaller {
+pub struct SinkSignaller {
     state: Mutex<State>,
     settings: Mutex<Settings>,
 }
 
-impl Signaller {
+impl SinkSignaller {
     async fn connect(&self, element: &WebRTCSink) -> Result<(), Error> {
         let settings = self.settings.lock().unwrap().clone();
 
@@ -359,13 +359,13 @@ impl Signaller {
 }
 
 #[glib::object_subclass]
-impl ObjectSubclass for Signaller {
+impl ObjectSubclass for SinkSignaller {
     const NAME: &'static str = "RsWebRTCSinkSignaller";
-    type Type = super::Signaller;
+    type Type = super::SinkSignaller;
     type ParentType = glib::Object;
 }
 
-impl ObjectImpl for Signaller {
+impl ObjectImpl for SinkSignaller {
     fn properties() -> &'static [glib::ParamSpec] {
         static PROPERTIES: Lazy<Vec<glib::ParamSpec>> = Lazy::new(|| {
             vec![

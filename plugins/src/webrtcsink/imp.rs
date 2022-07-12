@@ -18,7 +18,7 @@ use std::sync::Mutex;
 
 use super::homegrown_cc::CongestionController;
 use super::{WebRTCSinkCongestionControl, WebRTCSinkError, WebRTCSinkMitigationMode};
-use crate::signaller::Signaller;
+use crate::signaller::SinkSignaller;
 use std::collections::BTreeMap;
 
 static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
@@ -270,7 +270,7 @@ impl Default for Settings {
 
 impl Default for State {
     fn default() -> Self {
-        let signaller = Signaller::default();
+        let signaller = SinkSignaller::default();
 
         Self {
             signaller: Box::new(signaller),
