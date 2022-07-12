@@ -15,7 +15,14 @@ use gst::{
     subclass::prelude::*,
 };
 use once_cell::sync::Lazy;
-use std::{collections::{VecDeque, BTreeMap}, fmt, fmt::Debug, mem, sync::Mutex, time};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    fmt,
+    fmt::Debug,
+    mem,
+    sync::Mutex,
+    time,
+};
 
 type Bitrate = u32;
 
@@ -151,7 +158,7 @@ impl Packet {
                 arrival: Duration::zero(),
                 departure: ts2dur(departure),
                 size: structure.get::<u32>("size").unwrap() as usize,
-                seqnum
+                seqnum,
             });
         }
 
@@ -256,7 +263,6 @@ struct Detector {
     prev_group: Option<PacketGroup>, // Group that is ready to be used once "group" is filled
     measure: Duration,               // Delay variation measure
 
-
     last_received_packets: BTreeMap<u64, Packet>, // Order by seqnums, front is the newest, back is the oldest
 
     // Last loss update
@@ -353,7 +359,12 @@ impl Detector {
     }
 
     fn evict_old_received_packets(&mut self) {
-        let last_arrival = self.last_received_packets.values().next_back().unwrap().arrival;
+        let last_arrival = self
+            .last_received_packets
+            .values()
+            .next_back()
+            .unwrap()
+            .arrival;
 
         while last_arrival - self.oldest_packet_in_window_ts() > *PACKETS_RECEIVED_WINDOW {
             let oldest_seqnum = self.last_received_packets.iter().next().unwrap().0.clone();
@@ -367,7 +378,13 @@ impl Detector {
             return 0;
         }
 
-        let duration = self.last_received_packets.iter().next_back().unwrap().1.arrival
+        let duration = self
+            .last_received_packets
+            .iter()
+            .next_back()
+            .unwrap()
+            .1
+            .arrival
             - self.last_received_packets.iter().next().unwrap().1.arrival;
         let bits = self
             .last_received_packets

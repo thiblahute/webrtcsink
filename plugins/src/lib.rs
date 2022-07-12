@@ -3,9 +3,12 @@ use gst::glib;
 pub mod gcc;
 mod signaller;
 pub mod webrtcsink;
+pub mod webrtcsrc;
+pub mod utils;
 
 fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     webrtcsink::register(plugin)?;
+    webrtcsrc::register(plugin)?;
     gcc::register(plugin)?;
 
     Ok(())

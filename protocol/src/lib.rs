@@ -61,14 +61,14 @@ pub enum UnregisteredMessage {
 #[serde(tag = "peerType")]
 #[serde(rename_all = "camelCase")]
 pub enum Peer {
-    /// UnRegistered as a producer
+    /// Unregistered as a producer
     #[serde(rename_all = "camelCase")]
     Producer {
         id: String,
         #[serde(default)]
         meta: Option<serde_json::Value>,
     },
-    /// UnRegistered as a consumer
+    /// Unregistered as a consumer
     #[serde(rename_all = "camelCase")]
     Consumer {
         id: String,

@@ -18,7 +18,7 @@ use std::ops::Mul;
 use std::sync::Mutex;
 
 use super::{WebRTCSinkCongestionControl, WebRTCSinkError, WebRTCSinkMitigationMode};
-use crate::signaller::Signaller;
+use crate::signaller::SinkSignaller;
 use std::collections::BTreeMap;
 
 static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
@@ -330,7 +330,7 @@ impl Default for Settings {
 
 impl Default for State {
     fn default() -> Self {
-        let signaller = Signaller::default();
+        let signaller = SinkSignaller::default();
 
         Self {
             signaller: Box::new(signaller),
@@ -587,7 +587,9 @@ fn lookup_twcc_stats(stats: &gst::StructureRef) -> Option<gst::Structure> {
     for (_, field_value) in stats {
         if let Ok(s) = field_value.get::<gst::Structure>() {
             if let Ok(type_) = s.get::<gst_webrtc::WebRTCStatsType>("type") {
-                if (type_ == gst_webrtc::WebRTCStatsType::Transport || type_ == gst_webrtc::WebRTCStatsType::CandidatePair)  && s.has_field("gst-twcc-stats")
+                if (type_ == gst_webrtc::WebRTCStatsType::Transport
+                    || type_ == gst_webrtc::WebRTCStatsType::CandidatePair)
+                    && s.has_field("gst-twcc-stats")
                 {
                     return Some(s.get::<gst::Structure>("gst-twcc-stats").unwrap());
                 }
@@ -960,7 +962,6 @@ impl CongestionController {
         if let Some(twcc_stats) = lookup_twcc_stats(stats) {
             let op = self.update_delay(element, &twcc_stats, self.lookup_rtt(stats));
             self.apply_control_op(element, encoders, op, ControllerType::Delay);
-
         }
     }
 
@@ -1348,11 +1349,15 @@ impl Consumer {
                         congestion_controller.target_bitrate_on_delay += enc.bitrate();
                         congestion_controller.target_bitrate_on_loss =
                             congestion_controller.target_bitrate_on_delay;
-                        gst::error!(CAT, "WELL< SUre : {}", congestion_controller.target_bitrate_on_delay);
+                        gst::error!(
+                            CAT,
+                            "WELL< SUre : {}",
+                            congestion_controller.target_bitrate_on_delay
+                        );
                         enc.transceiver.set_property("fec-percentage", 0u32);
                     } else {
                         /* If congestion control is disabled, we simply use the highest
-                        * known "safe" value for the bitrate. */
+                         * known "safe" value for the bitrate. */
                         enc.set_bitrate(element, self.cc_info.max_bitrate as i32);
                         enc.transceiver.set_property("fec-percentage", 50u32);
                     }
@@ -1813,7 +1818,7 @@ impl WebRTCSink {
                         }
                     }),
                 );
-            },
+            }
             _ => (),
         }
 
@@ -2242,9 +2247,7 @@ impl WebRTCSink {
                     if let (Some(webrtcbin), Some(element)) =
                         (webrtcbin.upgrade(), element_clone.upgrade())
                     {
-                        element
-                            .imp()
-                            .process_stats(&element, webrtcbin, &peer_id);
+                        element.imp().process_stats(&element, webrtcbin, &peer_id);
                     } else {
                         break;
                     }

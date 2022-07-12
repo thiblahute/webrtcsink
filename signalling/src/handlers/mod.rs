@@ -56,42 +56,53 @@ impl Handler {
                 let answer = match message {
                     p::UnregisterMessage::Producer => {
                         self.remove_producer_peer(peer_id);
-                        p::UnregisteredMessage::Producer {peer_id: peer_id.into(), meta}
-                    },
+                        p::UnregisteredMessage::Producer {
+                            peer_id: peer_id.into(),
+                            meta,
+                        }
+                    }
                     p::UnregisterMessage::Consumer => {
                         self.remove_consumer_peer(peer_id);
-                        p::UnregisteredMessage::Consumer {peer_id: peer_id.into(), meta}
+                        p::UnregisteredMessage::Consumer {
+                            peer_id: peer_id.into(),
+                            meta,
+                        }
                     }
                     p::UnregisterMessage::Listener => {
                         self.remove_listener_peer(peer_id);
-                        p::UnregisteredMessage::Listener {peer_id: peer_id.into(), meta}
+                        p::UnregisteredMessage::Listener {
+                            peer_id: peer_id.into(),
+                            meta,
+                        }
                     }
                 };
 
                 self.items.push_back((
                     peer_id.into(),
-                    p::OutgoingMessage::Unregistered(
-                        answer.clone()
-                    )
+                    p::OutgoingMessage::Unregistered(answer.clone()),
                 ));
 
                 // We don't notify listeners about listeners activity
                 match message {
                     p::UnregisterMessage::Producer | p::UnregisterMessage::Consumer => {
-                        let mut messages = self.listeners.iter().map(|listener| {
-                            (
-                                listener.to_string(),
-                                p::OutgoingMessage::Unregistered(answer.clone())
-                            )
-                        }).collect::<VecDeque<(String, p::OutgoingMessage)>>();
+                        let mut messages = self
+                            .listeners
+                            .iter()
+                            .map(|listener| {
+                                (
+                                    listener.to_string(),
+                                    p::OutgoingMessage::Unregistered(answer.clone()),
+                                )
+                            })
+                            .collect::<VecDeque<(String, p::OutgoingMessage)>>();
 
                         self.items.append(&mut messages);
-                    },
-                    _ => ()
+                    }
+                    _ => (),
                 }
 
                 Ok(())
-            },
+            }
             p::IncomingMessage::StartSession(message) => {
                 self.start_session(&message.peer_id, peer_id)
             }
@@ -435,7 +446,11 @@ impl Handler {
 
     /// Register peer as a producer
     #[instrument(level = "debug", skip(self))]
-    fn register_producer(&mut self, peer_id: &str, meta: Option<serde_json::Value>) -> Result<(), Error> {
+    fn register_producer(
+        &mut self,
+        peer_id: &str,
+        meta: Option<serde_json::Value>,
+    ) -> Result<(), Error> {
         if self.producers.contains_key(peer_id) {
             Err(anyhow!("{} is already registered as a producer", peer_id))
         } else {
@@ -469,7 +484,11 @@ impl Handler {
 
     /// Register peer as a consumer
     #[instrument(level = "debug", skip(self))]
-    fn register_consumer(&mut self, peer_id: &str, meta: Option<serde_json::Value>) -> Result<(), Error> {
+    fn register_consumer(
+        &mut self,
+        peer_id: &str,
+        meta: Option<serde_json::Value>,
+    ) -> Result<(), Error> {
         if self.consumers.contains_key(peer_id) {
             Err(anyhow!("{} is already registered as a consumer", peer_id))
         } else {
@@ -493,7 +512,11 @@ impl Handler {
 
     /// Register peer as a listener
     #[instrument(level = "debug", skip(self))]
-    fn register_listener(&mut self, peer_id: &str, meta: Option<serde_json::Value>) -> Result<(), Error> {
+    fn register_listener(
+        &mut self,
+        peer_id: &str,
+        meta: Option<serde_json::Value>,
+    ) -> Result<(), Error> {
         if !self.listeners.insert(peer_id.to_string()) {
             Err(anyhow!("{} is already registered as a listener", peer_id))
         } else {
@@ -629,7 +652,7 @@ mod tests {
         let mut handler = Handler::new(Box::pin(rx));
 
         let message = p::IncomingMessage::Register(p::RegisterMessage::Producer {
-            meta: Some(json!( {"display-name": "foobar".to_string() }))
+            meta: Some(json!( {"display-name": "foobar".to_string() })),
         });
 
         tx.send(("producer".to_string(), Some(message)))
@@ -1275,10 +1298,12 @@ mod tests {
         assert_eq!(peer_id, "producer");
         assert_eq!(
             sent_message,
-            p::OutgoingMessage::Unregistered(p::UnregisteredMessage::Producer {peer_id: "producer".into(), meta: Default::default() })
+            p::OutgoingMessage::Unregistered(p::UnregisteredMessage::Producer {
+                peer_id: "producer".into(),
+                meta: Default::default()
+            })
         );
     }
-
 
     #[async_std::test]
     async fn test_unregistering_with_listenners() {
@@ -1358,7 +1383,7 @@ mod tests {
         assert_eq!(peer_id, "listener");
         assert_eq!(
             sent_message,
-            p::OutgoingMessage::ProducerRemoved{
+            p::OutgoingMessage::ProducerRemoved {
                 peer_id: "producer".into(),
                 meta: Some(json!({"some": "meta"}))
             }
