@@ -182,6 +182,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30696a84d817107fc028e049980e09d5e140e8da8f1caeb17e8e950658a3cea9"
 
 [[package]]
+name = "async-trait"
+version = "0.1.53"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed6aa3524a2dfcf9fe180c51eae2b58738348d819517ceadf95789c51fff7600"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "async-tungstenite"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -410,6 +421,41 @@ version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f877be4f7c9f246b183111634f75baa039715e3f46ce860677d3b19a69fb229c"
 dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "darling"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a01d95850c592940db9b8194bc39f4bc0e89dee5c4265e4b1807c34a9aba453c"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "859d65a907b6852c9361e3185c862aae7fafd2887876799fa55f5f99dc40d610"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
+dependencies = [
+ "darling_core",
  "quote",
  "syn",
 ]
@@ -648,6 +694,44 @@ dependencies = [
  "futures-core",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "gobject"
+version = "0.1.0"
+source = "git+https://github.com/jf2048/gobject#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a"
+dependencies = [
+ "async-trait",
+ "glib",
+ "gobject-macros",
+]
+
+[[package]]
+name = "gobject-core"
+version = "0.1.0"
+source = "git+https://github.com/jf2048/gobject#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a"
+dependencies = [
+ "bitflags",
+ "darling",
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "gobject-macros"
+version = "0.1.0"
+source = "git+https://github.com/jf2048/gobject#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a"
+dependencies = [
+ "darling",
+ "gobject-core",
+ "heck",
+ "proc-macro-crate",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -912,6 +996,12 @@ name = "human_bytes"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88a0d4dc39ec942e44c1c306aa196da67f2bd6a30dc7b4a475465c13ccf28817"
+
+[[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
@@ -1860,6 +1950,7 @@ dependencies = [
  "clap",
  "fastrand",
  "futures",
+ "gobject",
  "gst-plugin-version-helper",
  "gstreamer",
  "gstreamer-app",

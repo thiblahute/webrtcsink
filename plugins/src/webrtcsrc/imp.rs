@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use std::sync::Mutex;
 use std::str::FromStr;
 
-use crate::webrtcsrc::signaller::SourceSignaller;
+use crate::webrtcsrc::signaller::{Signallable, Signaller, prelude::*};
 
 static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
     gst::DebugCategory::new(
@@ -36,7 +36,7 @@ enum SignallerState {
 
 /* Our internal state */
 struct State {
-    signaller: gst::Object,
+    signaller: Signallable,
     signaller_state: SignallerState,
     webrtcbin: Option<gst::Element>,
     flow_combiner: gst_base::UniqueFlowCombiner,
@@ -73,7 +73,7 @@ impl Default for Settings {
 
 impl Default for State {
     fn default() -> Self {
-        let signaller = SourceSignaller::default();
+        let signaller = Signaller::default();
 
         Self {
             signaller: signaller.upcast(),
@@ -89,7 +89,7 @@ impl State {
         if self.signaller_state == SignallerState::Stopped
             && element.current_state() >= gst::State::Paused
         {
-            self.signaller.emit_by_name::<()>("start", &[]);
+            self.signaller.start();
 
             gst::info!(CAT, "Started signaller");
             self.signaller_state = SignallerState::Started;
@@ -98,7 +98,7 @@ impl State {
 
     fn maybe_stop_signaller(&mut self) {
         if self.signaller_state == SignallerState::Started {
-            self.signaller.emit_by_name::<()>("stop", &[]);
+            self.signaller.stop();
             self.signaller_state = SignallerState::Stopped;
             gst::info!(CAT, "Stopped signaller");
         }
@@ -174,9 +174,10 @@ impl WebRTCSrc {
         Ok(())
     }
 
-    fn connect_signaller(&self, signaler: &gst::Object) {
+    fn connect_signaller(&self, signaler: &Signallable) {
         let element = self.instance();
 
+        // FIXME Port to signaler.connect_error once https://github.com/jf2048/gobject/pull/30/ is merged
         signaler.connect_closure("error", false,
             glib::closure!(@weak-allow-none element => move |_signaler: glib::Object, error: String| {
                 let element = element.unwrap();
@@ -188,7 +189,8 @@ impl WebRTCSrc {
             })
         );
 
-        signaler.connect("end-session", false,
+        // FIXME port to signaler.connect_session_ended(
+        signaler.connect("session-ended", false,
             glib::clone!(@weak element => @default-panic, move |_values| {
                 gst::debug!(CAT, "Session ended.");
                 gst::element_error!(
@@ -201,15 +203,17 @@ impl WebRTCSrc {
             })
         );
 
-        signaler.connect_closure("get-meta", false,
+        // FIXME: signaler.connect_request_meta(
+        signaler.connect_closure("request-meta", false,
             glib::closure!(@weak-allow-none element => move |_signaler: glib::Object| {
                 element.unwrap().imp().settings.lock().unwrap().meta.clone()
             })
         );
 
+        // FIXME signaler.connect_sdp_offer(
         signaler.connect_closure("sdp-offer", false,
             glib::closure!(@weak-allow-none element => move
-                    |_signaler: glib::Object, offer: gst_webrtc::WebRTCSessionDescription| {
+                    |_signaler: glib::Object, _peer_id: &str, offer: &gst_webrtc::WebRTCSessionDescription| {
                 element.unwrap().imp().handle_offer(offer);
             })
         );
@@ -227,7 +231,7 @@ impl WebRTCSrc {
     }
 
     /// When using a custom signaller
-    pub fn set_signaller(&self, signaller: gst::Object) {
+    pub fn set_signaller(&self, signaller: Signallable) {
         let mut state = self.state.lock().unwrap();
 
         let sigobj = signaller.clone();
@@ -262,7 +266,7 @@ impl WebRTCSrc {
 
     pub fn handle_offer(
         &self,
-        offer: gst_webrtc::WebRTCSessionDescription,
+        offer: &gst_webrtc::WebRTCSessionDescription,
     ) {
         let sdp = offer.sdp();
         let direction = gst_webrtc::WebRTCRTPTransceiverDirection::Recvonly;
@@ -357,7 +361,7 @@ impl WebRTCSrc {
             .signaller
             .clone();
 
-        signaller.emit_by_name::<()>("handle-sdp", &[&answer]);
+        signaller.handle_sdp(&answer);
     }
 
     fn on_ice_candidate(
@@ -366,7 +370,7 @@ impl WebRTCSrc {
         candidate: String,
     ) {
         let signaller = self.state.lock().unwrap().signaller.clone();
-        signaller.emit_by_name::<()>("add-ice", &[&candidate, &sdp_m_line_index, &None::<String>]);
+        signaller.add_ice(&candidate, Some(sdp_m_line_index), None::<String>);
     }
 
     /// Called by the signaller with an ice candidate
@@ -461,7 +465,7 @@ impl ObjectImpl for WebRTCSrc {
                     "signaller",
                     "Signaller",
                     "The Signaller GObject",
-                    gst::Object::static_type(),
+                    glib::Object::static_type(),
                     glib::ParamFlags::READWRITE,
                 ),
             ]
@@ -507,7 +511,7 @@ impl ObjectImpl for WebRTCSrc {
                 }
             }
             "signaller" => {
-                self.set_signaller(value.get::<gst::Object>().expect("type checked upstream"));
+                self.set_signaller(value.get::<Signallable>().expect("type checked upstream"));
             }
             _ => unimplemented!(),
         }
@@ -537,11 +541,15 @@ impl ObjectImpl for WebRTCSrc {
                     .property_value("address")
             }
             "signaller" => {
-                self.state
+                let res = self.state
                     .lock()
                     .unwrap()
                     .signaller
-                    .to_value()
+                    .clone()
+                    .upcast::<glib::Object>();
+                gst::error!(CAT, "Res is {res:?}");
+
+                res.to_value()
             }
             _ => unimplemented!(),
         }
