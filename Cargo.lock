@@ -1887,7 +1887,6 @@ dependencies = [
  "gst-plugin-version-helper",
  "gstreamer",
  "gstreamer-app",
- "gstreamer-base",
  "gstreamer-rtp",
  "gstreamer-sdp",
  "gstreamer-utils",
@@ -1902,7 +1901,6 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
- "url",
  "uuid",
  "webrtcsink-protocol",
 ]

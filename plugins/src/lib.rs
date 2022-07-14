@@ -8,7 +8,7 @@ pub mod webrtcsrc;
 
 fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     webrtcsink::register(plugin)?;
-    webrtcsrc::register(plugin)?;
+    webrtcsrc::register(Some(plugin))?;
     gcc::register(plugin)?;
 
     Ok(())
