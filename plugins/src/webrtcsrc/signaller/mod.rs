@@ -18,7 +18,7 @@ pub static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
     )
 });
 
-#[gobject::interface]
+#[gobject::interface(requires(gst::Object))]
 mod iface {
     use std::sync::Mutex;
 

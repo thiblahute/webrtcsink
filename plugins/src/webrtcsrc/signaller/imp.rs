@@ -1,4 +1,4 @@
-#[gobject::class(final, implements(super::Signallable), sync)]
+#[gobject::class(final, extends(gst::Object), implements(super::Signallable), sync)]
 mod implement {
     use anyhow::{anyhow, Error};
     use async_std::{task, future::timeout};
@@ -99,6 +99,7 @@ mod implement {
                 Ok::<(), Error>(())
             });
 
+            gst::error!(CAT, obj: &instance, "Emit request meta");
             let meta = if let Some(meta) = instance.emit_request_meta() {
                 gvalue_to_json(&meta.to_value())
             } else {

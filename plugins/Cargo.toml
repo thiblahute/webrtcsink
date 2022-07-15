@@ -17,7 +17,7 @@ gst-webrtc = { git="https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", pack
 gst-sdp = { git="https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", package = "gstreamer-sdp", features = ["v1_20"] }
 gst-rtp = { git="https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", package = "gstreamer-rtp", features = ["v1_20"] }
 gst-utils = { git="https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", package = "gstreamer-utils" }
-gobject = { git="https://github.com/jf2048/gobject#a852cc2d2914f1cc2a375c9033c9e9f0fae7aa9a" }
+gobject = { git="https://github.com/thiblahute/gobject#a7844838921ff82dce13759ae9d20eab00f5a1d2" }
 once_cell = "1.0"
 chrono = { version = "0.4", default-features = false }
 smallvec = "1"
