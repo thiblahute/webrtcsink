@@ -183,6 +183,7 @@ mod imp {
             webrtcbin
         }
 
+        #[gobject::clone_block]
         fn add_pad(
             &self,
             instance: &super::WebRTCSrc,
@@ -196,13 +197,13 @@ mod imp {
             let template = instance.pad_template("src_%u").unwrap();
             let src_pad = gst::GhostPad::builder_with_template(&template, None)
                 .proxy_pad_chain_function(
-                    glib::clone!(@weak instance => @default-panic, move |pad, parent, buffer| {
+                    move |#[weak(or_panic)] instance, pad, parent, buffer| {
                         let this = instance.imp();
                         let padret = pad.chain_default(parent, buffer);
                         let ret = this.state.lock().unwrap().flow_combiner.update_flow(padret);
 
                         ret
-                    }),
+                    },
                 )
                 .build_with_target(pad)
                 .unwrap();
@@ -226,14 +227,13 @@ mod imp {
             webrtcbin.connect_closure(
                 "on-ice-candidate",
                 false,
-                glib::closure!(@watch instance =>
-                    move |_webrtcbin: gst::Bin, sdp_m_line_index: u32, candidate: String| {
+                #[closure] move |#[watch] instance, _webrtcbin: gst::Bin, sdp_m_line_index: u32, candidate: String| {
                     let this = Self::from_instance(instance);
                     this.on_ice_candidate(
                         sdp_m_line_index,
                         candidate,
                     );
-                }),
+                },
             );
 
             instance.add(&webrtcbin).expect("Could not add `webrtcbin`?");
@@ -258,58 +258,53 @@ mod imp {
 
             // FIXME Port to signaler.connect_error once https://github.com/jf2048/gobject/pull/30/ is merged
             signaler.connect_closure("error", false,
-                glib::closure!(@weak-allow-none instance => move |_signaler: glib::Object, error: String| {
-                    let instance = instance.unwrap();
+                #[closure] move |#[watch] instance, _signaler: glib::Object, error: String| {
                     gst::element_error!(
                         instance,
                         gst::StreamError::Failed,
                         ["Signalling error: {}", error]
                     );
-                })
+                }
             );
 
-            // FIXME port to signaler.connect_session_ended(
-            signaler.connect(
+            signaler.connect_closure(
                 "session-ended",
                 false,
-                glib::clone!(@weak instance => @default-panic, move |_values| {
+                #[closure] move |#[watch] instance, _signaller: glib::Object, _peer_id: &str| {
                     gst::debug!(CAT, "Session ended.");
                     gst::element_error!(
                         instance,
                         gst::StreamError::Failed,
                         ["Peer ended session"]
                     );
-
-                    None
-                }),
+                },
             );
 
             // FIXME: signaler.connect_request_meta(
             signaler.connect_closure(
                 "request-meta",
                 false,
-                glib::closure!(@weak-allow-none instance => move |_signaler: glib::Object| {
-                    instance.unwrap().imp().meta.lock().unwrap().clone()
-                }),
+                #[closure] move |#[watch] instance, _signaler: glib::Object| -> Option<gst::Structure> {
+                    let meta = instance.imp().meta.lock().unwrap().clone();
+
+                    meta
+                },
             );
 
             // FIXME signaler.connect_sdp_offer(
             signaler.connect_closure("sdp-offer", false,
-                glib::closure!(@weak-allow-none instance => move
-                        |_signaler: glib::Object, _peer_id: &str, offer: &gst_webrtc::WebRTCSessionDescription| {
-                    instance.unwrap().imp().handle_offer(offer);
-                })
+                #[closure] move |#[watch] instance, _signaler: glib::Object, _peer_id: &str, offer: &gst_webrtc::WebRTCSessionDescription| {
+                    instance.imp().handle_offer(offer);
+                }
             );
 
             // sdp_mid is exposed for future proofing, see
             // https://gitlab.freedesktop.org/gstreamer/gst-plugins-bad/-/issues/1174,
             // at the moment sdp_m_line_index must be Some
             signaler.connect_closure("handle-ice", false,
-                glib::closure!(@weak-allow-none instance => move
-                        |_signaler: glib::Object, peer_id: &str, sdp_m_line_index: u32, _sdp_mid: Option<String>, candidate: &str, | {
-
-                    instance.unwrap().imp().handle_ice( peer_id, Some(sdp_m_line_index), None, candidate);
-                })
+                #[closure] move |#[watch] instance, _signaler: glib::Object, peer_id: &str, sdp_m_line_index: u32, _sdp_mid: Option<String>, candidate: &str, | {
+                    instance.imp().handle_ice( peer_id, Some(sdp_m_line_index), None, candidate);
+                }
             );
         }
 
