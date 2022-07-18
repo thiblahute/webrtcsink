@@ -699,20 +699,23 @@ dependencies = [
 [[package]]
 name = "gobject"
 version = "0.1.0"
-source = "git+https://github.com/thiblahute/gobject#a7844838921ff82dce13759ae9d20eab00f5a1d2#a7844838921ff82dce13759ae9d20eab00f5a1d2"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/gst#9f3285950351d951d06e55efe86ac4f16dd1405f"
 dependencies = [
  "async-trait",
  "glib",
  "gobject-macros",
+ "gstreamer",
+ "once_cell",
 ]
 
 [[package]]
 name = "gobject-core"
 version = "0.1.0"
-source = "git+https://github.com/thiblahute/gobject#a7844838921ff82dce13759ae9d20eab00f5a1d2#a7844838921ff82dce13759ae9d20eab00f5a1d2"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/gst#9f3285950351d951d06e55efe86ac4f16dd1405f"
 dependencies = [
  "bitflags",
  "darling",
+ "gstreamer",
  "heck",
  "proc-macro2",
  "quote",
@@ -722,10 +725,11 @@ dependencies = [
 [[package]]
 name = "gobject-macros"
 version = "0.1.0"
-source = "git+https://github.com/thiblahute/gobject#a7844838921ff82dce13759ae9d20eab00f5a1d2#a7844838921ff82dce13759ae9d20eab00f5a1d2"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/gst#9f3285950351d951d06e55efe86ac4f16dd1405f"
 dependencies = [
  "darling",
  "gobject-core",
+ "gstreamer",
  "heck",
  "proc-macro-crate",
  "proc-macro-error",

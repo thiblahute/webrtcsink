@@ -2,10 +2,15 @@ use gst::{glib, prelude::*};
 
 mod signaller;
 
-#[gobject::class(
-    final,
-    extends(gst::Bin, gst::Element, gst::Object),
-    implements(gst::ChildProxy, gst::URIHandler)
+#[gobject::gst_element(
+    class(final, extends(gst::Bin), implements(gst::ChildProxy, gst::URIHandler)),
+    long_name = "WebRTCSrc",
+    classification = "Source/Network/WebRTC",
+    description = "WebRTC Src",
+    author = "Thibault Saunier <tsaunier@igalia.com>",
+    pad_templates(
+        src__u(presence="sometimes", caps="application/x-rtp"),
+    )
 )]
 mod imp {
     use crate::webrtcsrc::signaller::{prelude::*, Signallable, Signaller};
@@ -256,7 +261,6 @@ mod imp {
         fn connect_signaller(&self, signaler: &Signallable) {
             let instance = self.instance();
 
-            // FIXME Port to signaler.connect_error once https://github.com/jf2048/gobject/pull/30/ is merged
             signaler.connect_closure("error", false,
                 #[closure] move |#[watch] instance, _signaler: glib::Object, error: String| {
                     gst::element_error!(
@@ -447,43 +451,10 @@ mod imp {
                 gst::info!(CAT, "Stopped signaller");
             }
         }
-    }
-
-    impl ElementImpl for WebRTCSrc {
-        fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
-            static ELEMENT_METADATA: Lazy<gst::subclass::ElementMetadata> = Lazy::new(|| {
-                gst::subclass::ElementMetadata::new(
-                    "WebRTCSrc",
-                    "Source/Network/WebRTC",
-                    "WebRTC Src",
-                    "Thibault Saunier <tsaunier@igalia.com>",
-                )
-            });
-
-            Some(&*ELEMENT_METADATA)
-        }
-        fn pad_templates() -> &'static [gst::PadTemplate] {
-            static PAD_TEMPLATES: Lazy<Vec<gst::PadTemplate>> = Lazy::new(|| {
-                let caps = gst::Caps::builder_full()
-                    .structure(gst::Structure::builder("application/x-rtp").build())
-                    .build();
-                let pad_template = gst::PadTemplate::new(
-                    "src_%u",
-                    gst::PadDirection::Src,
-                    gst::PadPresence::Sometimes,
-                    &caps,
-                )
-                .unwrap();
-
-                vec![pad_template]
-            });
-
-            PAD_TEMPLATES.as_ref()
-        }
 
         fn change_state(
             &self,
-            instance: &Self::Type,
+            instance: &super::WebRTCSrc,
             transition: gst::StateChange,
         ) -> Result<gst::StateChangeSuccess, gst::StateChangeError> {
             if let gst::StateChange::NullToReady = transition {
@@ -524,7 +495,6 @@ mod imp {
     }
 
     impl BinImpl for WebRTCSrc {}
-    impl GstObjectImpl for WebRTCSrc {}
 
     // --------------------------
     // Interfaces implementation
