@@ -64,17 +64,15 @@ fn json_to_gststructure(val: &serde_json::Value) -> Option<glib::SendValue> {
         }
         serde_json::Value::String(v) => Some(v.to_send_value()),
         serde_json::Value::Array(v) => {
-            let array = v.iter().filter_map(|v| {
-                json_to_gststructure(v)
-            }).collect::<Vec<glib::SendValue>>();
+            let array = v
+                .iter()
+                .filter_map(|v| json_to_gststructure(v))
+                .collect::<Vec<glib::SendValue>>();
             Some(gst::Array::from_values(array).to_send_value())
         }
-        serde_json::Value::Object(v) => {
-            Some(serialize_json_object(v).to_send_value())
-        }
-        _ => None
+        serde_json::Value::Object(v) => Some(serialize_json_object(v).to_send_value()),
+        _ => None,
     }
-
 }
 
 pub fn serialize_json_object(val: &serde_json::Map<String, serde_json::Value>) -> gst::Structure {
@@ -88,6 +86,3 @@ pub fn serialize_json_object(val: &serde_json::Map<String, serde_json::Value>) -
 
     res
 }
-
-
-

@@ -5,9 +5,7 @@ use once_cell::sync::Lazy;
 // generated bindings
 pub use imp::Signaller;
 pub mod prelude {
-    pub use {
-        super::SignallableExt, super::SignallableImpl
-    };
+    pub use {super::SignallableExt, super::SignallableImpl};
 }
 
 pub static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
@@ -34,9 +32,15 @@ mod iface {
         #[signal]
         fn session_ended(iface: &super::Signallable, peer_id: &str) {}
         #[signal]
-        fn producer_added(iface: &super::Signallable, peer_id: &str, meta: Option<gst::Structure>) {}
+        fn producer_added(iface: &super::Signallable, peer_id: &str, meta: Option<gst::Structure>) {
+        }
         #[signal]
-        fn producer_removed(iface: &super::Signallable, peer_id: &str, meta: Option<gst::Structure>) {}
+        fn producer_removed(
+            iface: &super::Signallable,
+            peer_id: &str,
+            meta: Option<gst::Structure>,
+        ) {
+        }
         #[signal]
         fn error(iface: &super::Signallable, error: &str) {}
         #[signal(run_first)]
@@ -44,18 +48,36 @@ mod iface {
             None
         }
         #[signal]
-        fn handle_ice(iface: &super::Signallable, peer_id: &str, sdp_m_line_index: u32, sdp_mid: Option<String>, candidate: &str) { }
+        fn handle_ice(
+            iface: &super::Signallable,
+            peer_id: &str,
+            sdp_m_line_index: u32,
+            sdp_mid: Option<String>,
+            candidate: &str,
+        ) {
+        }
         #[signal]
-        fn sdp_offer(_iface: &super::Signallable, peer_id: &str, _sdp: &gst_webrtc::WebRTCSessionDescription) {}
+        fn sdp_offer(
+            _iface: &super::Signallable,
+            peer_id: &str,
+            _sdp: &gst_webrtc::WebRTCSessionDescription,
+        ) {
+        }
 
         #[virt]
-        fn start(_iface: &super::Signallable) { }
+        fn start(_iface: &super::Signallable) {}
         #[virt]
-        fn stop(_iface: &super::Signallable) { }
+        fn stop(_iface: &super::Signallable) {}
         #[virt]
         fn handle_sdp(_iface: &super::Signallable, _sdp: &gst_webrtc::WebRTCSessionDescription) {}
         #[virt]
-        fn add_ice(_iface: &super::Signallable, _candidate: &str, _sdp_m_line_index: Option<u32>, _sdp_mid: Option<String>) { }
+        fn add_ice(
+            _iface: &super::Signallable,
+            _candidate: &str,
+            _sdp_m_line_index: Option<u32>,
+            _sdp_mid: Option<String>,
+        ) {
+        }
     }
 }
 
