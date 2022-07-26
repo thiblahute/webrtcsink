@@ -384,7 +384,8 @@ mod imp {
                 }
                 gst::info!(CAT, "Adding transceiver with caps: {}", caps.to_string());
 
-                webrtcbin.emit_by_name::<gst::Object>("add-transceiver", &[&direction, &caps]);
+                let transceiver = webrtcbin.emit_by_name::<gst::Object>("add-transceiver", &[&direction, &caps]);
+                transceiver.set_property("do-nack", &true);
             }
 
             gst::log!(CAT, "Got offer {}", offer.sdp().to_string());
