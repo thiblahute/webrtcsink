@@ -295,9 +295,10 @@ mod imp {
                                     .unwrap()
                                     .set_name("application/x-rtp");
 
-                                media
-                                    .attributes_to_caps(tmpcaps.get_mut().unwrap())
-                                    .unwrap();
+                                tmpcaps.get_mut().unwrap().iter_mut().for_each(|s| {
+                                    s.set("rtcp-fb-transport-cc", &true);
+                                    s.set("extmap-1", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01");
+                                });
 
                                 tmpcaps
                             })
