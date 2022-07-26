@@ -58,7 +58,7 @@ mod imp {
             let signaller = Signaller::default();
 
             Self {
-                stun_server: Default::default(),
+                stun_server: Mutex::new("stun://stun.l.google.com:19302".to_string()),
                 state: Default::default(),
                 signaller: Mutex::new(signaller.upcast()),
                 meta: Default::default(),
@@ -162,6 +162,7 @@ mod imp {
                 .unwrap();
 
             webrtcbin.set_property_from_str("bundle-policy", "max-bundle");
+            webrtcbin.set_property_from_str("stun-server", &self.stun_server());
             let instance = self.instance();
             webrtcbin.connect_pad_added(glib::clone!(@weak instance => move |_webrtcbin, pad| {
                 if let Err(err) = instance.imp().add_pad(&instance, pad) {

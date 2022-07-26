@@ -397,7 +397,7 @@ mod implement {
 
         fn handle_sdp(&self, _instance: &Self::Type, sdp: &gst_webrtc::WebRTCSessionDescription) {
             let peer_id = self.peer_id();
-            let msg = p::IncomingMessage::Peer(p::PeerMessage::Producer(p::PeerMessageInfo {
+            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(p::PeerMessageInfo {
                 peer_id: peer_id.unwrap(),
                 peer_message: p::PeerMessageInner::Sdp(p::SdpMessage::Answer {
                     sdp: sdp.sdp().as_text().unwrap(),
@@ -410,10 +410,19 @@ mod implement {
         fn add_ice(
             &self,
             _obj: &Self::Type,
-            _candidate: &str,
-            _sdp_m_line_index: Option<u32>,
+            candidate: &str,
+            sdp_m_line_index: Option<u32>,
             _sdp_mid: Option<String>,
         ) {
+            let peer_id = self.peer_id();
+            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(p::PeerMessageInfo {
+                peer_id: peer_id.unwrap(),
+                peer_message: p::PeerMessageInner::Ice {
+                    candidate: candidate.to_string(),
+                    sdp_m_line_index: sdp_m_line_index.unwrap(),
+                },
+            }));
+            self.send(msg);
         }
     }
     impl GstObjectImpl for Signaller {}
