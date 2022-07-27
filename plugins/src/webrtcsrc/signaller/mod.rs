@@ -65,9 +65,21 @@ mod iface {
         }
 
         #[virt]
-        fn start(_iface: &super::Signallable) {}
+        fn vstart(_iface: &super::Signallable) {}
+
+        #[signal(action)]
+        fn start(iface: &super::Signallable) {
+            iface.vstart();
+        }
+
         #[virt]
-        fn stop(_iface: &super::Signallable) {}
+        fn vstop(_iface: &super::Signallable) {}
+
+        #[signal(action)]
+        fn stop(iface: &super::Signallable) {
+            iface.vstop();
+        }
+
         #[virt]
         fn handle_sdp(_iface: &super::Signallable, _sdp: &gst_webrtc::WebRTCSessionDescription) {}
         #[virt]

@@ -363,7 +363,7 @@ mod implement {
     }
 
     impl SignallableImpl for Signaller {
-        fn start(&self, instance: &Self::Type) {
+        fn vstart(&self, instance: &Self::Type) {
             let instance = instance.clone();
             task::spawn(async move {
                 let this = Self::from_instance(&instance);
@@ -373,7 +373,7 @@ mod implement {
             });
         }
 
-        fn stop(&self, instance: &Self::Type) {
+        fn vstop(&self, instance: &super::Signaller) {
             let instance = instance.clone();
             gst::info!(CAT, obj: &instance, "Stopping now");
 

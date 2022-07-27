@@ -460,7 +460,7 @@ mod imp {
             if state.signaller_state == SignallerState::Stopped
                 && instance.current_state() >= gst::State::Paused
             {
-                instance.signaller().start();
+                instance.signaller().vstart();
 
                 gst::info!(CAT, "Started signaller");
                 state.signaller_state = SignallerState::Started;
