@@ -470,7 +470,7 @@ mod imp {
         fn maybe_stop_signaller(&self) {
             let mut state = self.state.lock().unwrap();
             if state.signaller_state == SignallerState::Started {
-                self.instance().signaller().stop();
+                self.instance().signaller().vstop();
                 state.signaller_state = SignallerState::Stopped;
                 gst::info!(CAT, "Stopped signaller");
             }

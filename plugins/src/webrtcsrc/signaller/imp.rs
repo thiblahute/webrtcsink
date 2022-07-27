@@ -28,6 +28,9 @@ mod implement {
 
         #[property(get, set, override_iface = "Signallable")]
         cafile: Mutex<Option<String>>,
+
+        #[property(get, set)]
+        listener: Mutex<bool>,
     }
 
     #[derive(Default)]
@@ -46,7 +49,9 @@ mod implement {
         async fn connect(&self) -> Result<(), Error> {
             let instance = self.instance();
 
-            self.peer_id().ok_or_else(|| anyhow!("No peer id set"))?;
+            if !instance.listener() {
+                self.peer_id().ok_or_else(|| anyhow!("No peer id set"))?;
+            }
 
             let connector = if let Some(path) = instance.cafile() {
                 let cert = async_std::fs::read_to_string(&path).await?;
@@ -126,13 +131,15 @@ mod implement {
                                             p::RegisteredMessage::Consumer { peer_id, .. },
                                         ) => {
                                             let imp = instance.imp();
-                                            imp.start_session();
-                                            gst::info!(
-                                                CAT,
-                                                obj: &instance,
-                                                "We are registered with the server, our peer id is {}, now registering as listener",
-                                                peer_id
-                                            );
+                                            if !instance.listener() {
+                                                imp.start_session();
+                                                gst::info!(
+                                                    CAT,
+                                                    obj: &instance,
+                                                    "We are registered with the server, our peer id is {}, now registering as listener",
+                                                    peer_id
+                                                );
+                                            }
 
                                             imp.send(p::IncomingMessage::Register(
                                                 p::RegisterMessage::Listener { meta: meta.clone() },
