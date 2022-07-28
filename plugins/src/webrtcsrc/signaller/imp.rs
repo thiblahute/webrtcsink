@@ -1,3 +1,14 @@
+use gst::glib;
+#[derive(Debug, Eq, PartialEq, Clone, Copy, glib::Enum, Default)]
+#[repr(u32)]
+#[enum_type(name = "GstWebRTCSignallerMode")]
+pub enum WebRTCSignallerMode {
+    #[default]
+    Consumer,
+    Producer,
+    Listener,
+}
+
 #[gobject::class(final, extends(gst::Object), implements(super::Signallable), sync)]
 mod implement {
     use crate::utils::{gvalue_to_json, serialize_json_object};
@@ -17,7 +28,6 @@ mod implement {
 
     use super::super::CAT;
 
-    #[derive(Default)]
     pub struct Signaller {
         state: Mutex<State>,
 
@@ -28,6 +38,20 @@ mod implement {
 
         #[property(get, set, override_iface = "Signallable")]
         cafile: Mutex<Option<String>>,
+
+        #[property(get, set, enum)]
+        mode: Mutex<super::WebRTCSignallerMode>,
+    }
+
+    impl Default for Signaller {
+        fn default() -> Self {
+            Self {
+                state: Default::default(),
+                address: Mutex::new("ws://127.0.0.1:8443".to_string()),
+                cafile: Default::default(),
+                mode: Default::default(),
+            }
+        }
     }
 
     #[derive(Default)]
@@ -46,7 +70,10 @@ mod implement {
         async fn connect(&self) -> Result<(), Error> {
             let instance = self.instance();
 
-            self.peer_id().ok_or_else(|| anyhow!("No peer id set"))?;
+            if let super::WebRTCSignallerMode::Consumer = *self.mode.lock().unwrap() {
+                self.producer_peer_id()
+                    .ok_or_else(|| anyhow!("No target producer peer id set"))?;
+            }
 
             let connector = if let Some(path) = instance.cafile() {
                 let cert = async_std::fs::read_to_string(&path).await?;
@@ -61,6 +88,7 @@ mod implement {
 
             uri.set_query(None);
             let (ws, _) = timeout(
+                // FIXME: Make the timeout configurable
                 Duration::from_secs(20),
                 async_tungstenite::async_std::connect_async_with_tls_connector(
                     uri.to_string(),
@@ -106,11 +134,7 @@ mod implement {
                 None
             };
 
-            websocket_sender
-                .send(p::IncomingMessage::Register(p::RegisterMessage::Consumer {
-                    meta: meta.clone(),
-                }))
-                .await?;
+            websocket_sender.send(self.register_message(&meta)).await?;
 
             let winstance = instance.downgrade();
             let receive_task_handle = task::spawn(async move {
@@ -123,20 +147,10 @@ mod implement {
                                 if let Ok(msg) = serde_json::from_str::<p::OutgoingMessage>(&msg) {
                                     match msg {
                                         p::OutgoingMessage::Registered(
-                                            p::RegisteredMessage::Consumer { peer_id, .. },
+                                            p::RegisteredMessage::Consumer { .. },
                                         ) => {
                                             let imp = instance.imp();
                                             imp.start_session();
-                                            gst::info!(
-                                                CAT,
-                                                obj: &instance,
-                                                "We are registered with the server, our peer id is {}, now registering as listener",
-                                                peer_id
-                                            );
-
-                                            imp.send(p::IncomingMessage::Register(
-                                                p::RegisterMessage::Listener { meta: meta.clone() },
-                                            ));
                                         }
                                         p::OutgoingMessage::ProducerAdded { peer_id, meta } => {
                                             let meta = meta.and_then(|m| match m {
@@ -169,7 +183,14 @@ mod implement {
                                                 register_info
                                             )
                                         }
-                                        p::OutgoingMessage::StartSession { .. } => unreachable!(),
+                                        p::OutgoingMessage::StartSession { peer_id } => {
+                                            assert!(matches!(
+                                                instance.mode(),
+                                                super::WebRTCSignallerMode::Producer
+                                            ));
+
+                                            instance.emit_session_requested(&peer_id);
+                                        }
                                         p::OutgoingMessage::EndSession(msg) => {
                                             let (peer_id, peer_type) = match msg {
                                                 p::EndSessionMessage::Producer { peer_id } => {
@@ -192,8 +213,28 @@ mod implement {
                                             | p::PeerMessage::Producer(info),
                                         ) => match info.peer_message {
                                             p::PeerMessageInner::Sdp(p::SdpMessage::Answer {
-                                                ..
-                                            }) => unreachable!(),
+                                                sdp,
+                                            }) => {
+                                                let sdp = match gst_sdp::SDPMessage::parse_buffer(
+                                                    sdp.as_bytes(),
+                                                ) {
+                                                    Ok(sdp) => sdp,
+                                                    Err(err) => {
+                                                        instance.emit_error(&format!(
+                                                            "Error parsing SDP: {sdp} {err:?}"
+                                                        ));
+
+                                                        break;
+                                                    }
+                                                };
+
+                                                let answer =
+                                                    gst_webrtc::WebRTCSessionDescription::new(
+                                                        gst_webrtc::WebRTCSDPType::Answer,
+                                                        sdp,
+                                                    );
+                                                instance.emit_sdp_answer(&info.peer_id, &answer);
+                                            }
                                             p::PeerMessageInner::Sdp(p::SdpMessage::Offer {
                                                 sdp,
                                             }) => {
@@ -291,7 +332,22 @@ mod implement {
             Ok(())
         }
 
-        pub fn peer_id(&self) -> Option<String> {
+        fn register_message(&self, meta: &Option<serde_json::Value>) -> p::IncomingMessage {
+            p::IncomingMessage::Register(match *self.mode.lock().unwrap() {
+                super::WebRTCSignallerMode::Consumer => {
+                    p::RegisterMessage::Consumer { meta: meta.clone() }
+                }
+                super::WebRTCSignallerMode::Producer => {
+                    p::RegisterMessage::Producer { meta: meta.clone() }
+                }
+                super::WebRTCSignallerMode::Listener => {
+                    p::RegisterMessage::Listener { meta: meta.clone() }
+                }
+            })
+        }
+
+        #[public]
+        fn producer_peer_id(&self) -> Option<String> {
             if let Ok(ref uri) = self.uri() {
                 if let Ok(id) = uri.query_pairs().find(|(k, _)| k == "peer-id").map_or_else(
                     || Err(anyhow!("No `peer-id` set in url")),
@@ -321,52 +377,49 @@ mod implement {
         }
 
         pub fn start_session(&self) {
-            let target_producer = self.peer_id().unwrap();
+            let instance = self.instance();
 
-            self.send(p::IncomingMessage::StartSession(p::StartSessionMessage {
-                peer_id: target_producer,
-            }));
-        }
+            match *self.mode.lock().unwrap() {
+                super::WebRTCSignallerMode::Consumer => {
+                    let target_producer = self.producer_peer_id().unwrap();
 
-        /// sdp_mid is exposed for future proofing, see
-        /// https://gitlab.freedesktop.org/gstreamer/gst-plugins-bad/-/issues/1174,
-        /// at the moment sdp_m_line_index will always be Some and sdp_mid will always
-        /// be None
-        pub fn handle_ice(
-            &self,
-            candidate: &str,
-            sdp_m_line_index: Option<u32>,
-            _sdp_mid: Option<String>,
-        ) {
-            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(p::PeerMessageInfo {
-                peer_id: self.peer_id().unwrap(),
-                peer_message: p::PeerMessageInner::Ice {
-                    candidate: candidate.to_string(),
-                    sdp_m_line_index: sdp_m_line_index.unwrap(),
-                },
-            }));
+                    self.send(p::IncomingMessage::StartSession(p::StartSessionMessage {
+                        peer_id: target_producer.clone(),
+                    }));
 
-            self.send(msg);
+                    gst::info!(
+                        CAT,
+                        obj: &instance,
+                        "We are registered with the server, our peer id is {}, now registering as listener",
+                        target_producer
+                    );
+                }
+                _ => (),
+            }
         }
     }
 
     impl super::Signaller {
         #[constructor(infallible, default)]
         fn default() -> Self {}
+
+        #[constructor(infallible)]
+        pub fn new(mode: super::WebRTCSignallerMode) -> Self {}
     }
 
     impl SignallableImpl for Signaller {
-        fn start(&self, instance: &Self::Type) {
+        fn vstart(&self, instance: &Self::Type) {
             let instance = instance.clone();
             task::spawn(async move {
                 let this = Self::from_instance(&instance);
                 if let Err(err) = this.connect().await {
+                    gst::error!(CAT, "-=-->? BOOM {err}");
                     instance.emit_error(&format!("Error receiving: {}", err));
                 }
             });
         }
 
-        fn stop(&self, instance: &Self::Type) {
+        fn vstop(&self, instance: &Self::Type) {
             let instance = instance.clone();
             gst::info!(CAT, obj: &instance, "Stopping now");
 
@@ -395,14 +448,38 @@ mod implement {
             }
         }
 
-        fn handle_sdp(&self, _instance: &Self::Type, sdp: &gst_webrtc::WebRTCSessionDescription) {
-            let peer_id = self.peer_id();
-            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(p::PeerMessageInfo {
-                peer_id: peer_id.unwrap(),
-                peer_message: p::PeerMessageInner::Sdp(p::SdpMessage::Answer {
-                    sdp: sdp.sdp().as_text().unwrap(),
+        fn send_sdp(
+            &self,
+            _instance: &Self::Type,
+            peer_id: Option<&str>,
+            sdp: &gst_webrtc::WebRTCSessionDescription,
+        ) {
+            let is_consumer = match *self.mode.lock().unwrap() {
+                super::WebRTCSignallerMode::Consumer => true,
+                super::WebRTCSignallerMode::Producer => false,
+                _ => unreachable!(),
+            };
+
+            let peer_id =
+                peer_id.map_or_else(|| self.producer_peer_id().unwrap(), |id| id.to_string());
+            let info = p::PeerMessageInfo {
+                peer_id,
+                peer_message: p::PeerMessageInner::Sdp(if is_consumer {
+                    p::SdpMessage::Answer {
+                        sdp: sdp.sdp().as_text().unwrap(),
+                    }
+                } else {
+                    p::SdpMessage::Offer {
+                        sdp: sdp.sdp().as_text().unwrap(),
+                    }
                 }),
-            }));
+            };
+
+            let msg = p::IncomingMessage::Peer(if is_consumer {
+                p::PeerMessage::Consumer(info)
+            } else {
+                p::PeerMessage::Producer(info)
+            });
 
             self.send(msg);
         }
@@ -410,19 +487,52 @@ mod implement {
         fn add_ice(
             &self,
             _obj: &Self::Type,
+            peer_id: Option<&str>,
             candidate: &str,
             sdp_m_line_index: Option<u32>,
             _sdp_mid: Option<String>,
         ) {
-            let peer_id = self.peer_id();
-            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(p::PeerMessageInfo {
-                peer_id: peer_id.unwrap(),
+            let peer_id =
+                peer_id.map_or_else(|| self.producer_peer_id().unwrap(), |id| id.to_string());
+            let info = p::PeerMessageInfo {
+                peer_id,
                 peer_message: p::PeerMessageInner::Ice {
                     candidate: candidate.to_string(),
                     sdp_m_line_index: sdp_m_line_index.unwrap(),
                 },
-            }));
+            };
+
+            let msg = p::IncomingMessage::Peer(match *self.mode.lock().unwrap() {
+                super::WebRTCSignallerMode::Consumer => p::PeerMessage::Consumer(info),
+                super::WebRTCSignallerMode::Producer => p::PeerMessage::Producer(info),
+                _ => unreachable!(),
+            });
+
             self.send(msg);
+        }
+
+        fn consumer_removed(&self, obj: &Self::Type, peer_id: &str) {
+            gst::debug!(CAT, obj: obj, "Signalling consumer {} removed", peer_id);
+
+            let state = self.state.lock().unwrap();
+            let peer_id = peer_id.to_string();
+            let instance = obj.downgrade();
+            if let Some(mut sender) = state.websocket_sender.clone() {
+                task::spawn(async move {
+                    if let Err(err) = sender
+                        .send(p::IncomingMessage::EndSession(
+                            p::EndSessionMessage::Consumer {
+                                peer_id: peer_id.to_string(),
+                            },
+                        ))
+                        .await
+                    {
+                        if let Some(instance) = instance.upgrade() {
+                            instance.emit_error(&format!("Error: {}", err));
+                        }
+                    }
+                });
+            }
         }
     }
     impl GstObjectImpl for Signaller {}

@@ -3,7 +3,7 @@ mod imp;
 use once_cell::sync::Lazy;
 // Expose traits and objects from the module itself so it exactly looks like
 // generated bindings
-pub use imp::Signaller;
+pub use imp::{Signaller, WebRTCSignallerMode};
 pub mod prelude {
     pub use {super::SignallableExt, super::SignallableImpl};
 }
@@ -42,6 +42,8 @@ mod iface {
         ) {
         }
         #[signal]
+        fn session_requested(iface: &super::Signallable, peer_id: &str) {}
+        #[signal]
         fn error(iface: &super::Signallable, error: &str) {}
         #[signal(run_first)]
         fn request_meta(_iface: &super::Signallable) -> Option<gst::Structure> {
@@ -63,21 +65,50 @@ mod iface {
             _sdp: &gst_webrtc::WebRTCSessionDescription,
         ) {
         }
+        #[signal]
+        fn sdp_answer(
+            _iface: &super::Signallable,
+            peer_id: &str,
+            _sdp: &gst_webrtc::WebRTCSessionDescription,
+        ) {
+        }
 
         #[virt]
-        fn start(_iface: &super::Signallable) {}
+        fn vstart(_iface: &super::Signallable) {}
+
+        #[signal(action)]
+        fn start(iface: &super::Signallable) {
+            iface.vstart();
+        }
+
         #[virt]
-        fn stop(_iface: &super::Signallable) {}
+        fn vstop(_iface: &super::Signallable) {}
+
+        #[signal(action)]
+        fn stop(iface: &super::Signallable) {
+            iface.vstop();
+        }
+
         #[virt]
-        fn handle_sdp(_iface: &super::Signallable, _sdp: &gst_webrtc::WebRTCSessionDescription) {}
+        fn send_sdp(
+            _iface: &super::Signallable,
+            _peer_id: Option<&str>,
+            _sdp: &gst_webrtc::WebRTCSessionDescription,
+        ) {
+        }
+
         #[virt]
         fn add_ice(
             _iface: &super::Signallable,
+            _peer_id: Option<&str>,
             _candidate: &str,
             _sdp_m_line_index: Option<u32>,
             _sdp_mid: Option<String>,
         ) {
         }
+
+        #[virt]
+        fn consumer_removed(_iface: &super::Signallable, _peer_id: &str) {}
     }
 }
 

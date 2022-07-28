@@ -1,16 +1,19 @@
 use gst::{glib, prelude::*};
 
-mod signaller;
+pub mod signaller;
+
+const RTP_TWCC_URI: &str =
+    "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
 
 #[gobject::gst_element(
     class(final, extends(gst::Bin), implements(gst::ChildProxy, gst::URIHandler)),
     factory_name = "webrtcsrc",
-    rank = "primary",
+    rank = "Primary",
     long_name = "WebRTCSrc",
     classification = "Source/Network/WebRTC",
     description = "WebRTC Src",
     author = "Thibault Saunier <tsaunier@igalia.com>",
-    pad_templates(src__u(presence = "sometimes", caps = "application/x-rtp"),)
+    pad_templates(src__u(presence = "Sometimes", caps = "application/x-rtp"),)
 )]
 mod imp {
     use crate::webrtcsrc::signaller::{prelude::*, Signallable, Signaller};
@@ -71,6 +74,15 @@ mod imp {
                 ])),
             }
         }
+    }
+
+    #[allow(dead_code)]
+    struct SignallerSignals {
+        error: glib::SignalHandlerId,
+        session_ended: glib::SignalHandlerId,
+        request_meta: glib::SignalHandlerId,
+        sdp_offer: glib::SignalHandlerId,
+        handle_ice: glib::SignalHandlerId,
     }
 
     impl WebRTCSrc {
@@ -205,72 +217,83 @@ mod imp {
         fn connect_signaller(&self, signaler: &Signallable) {
             let instance = self.instance();
 
-            signaler.connect_closure(
-                "error",
-                false,
-                #[closure]
-                move |#[watch] instance, _signaler: glib::Object, error: String| {
-                    gst::element_error!(
-                        instance,
-                        gst::StreamError::Failed,
-                        ["Signalling error: {}", error]
-                    );
-                },
-            );
+            let _ = self
+                .state
+                .lock()
+                .unwrap()
+                .signaller_signals
+                .insert(SignallerSignals {
+                error: signaler.connect_closure(
+                    "error",
+                    false,
+                    #[closure]
+                    move |#[watch] instance, _signaler: glib::Object, error: String| {
+                        gst::element_error!(
+                            instance,
+                            gst::StreamError::Failed,
+                            ["Signalling error: {}", error]
+                        );
+                    },
+                ),
 
-            signaler.connect_closure(
-                "session-ended",
-                false,
-                #[closure]
-                move |#[watch] instance, _signaller: glib::Object, _peer_id: &str| {
-                    gst::debug!(CAT, "Session ended.");
-                    gst::element_error!(instance, gst::StreamError::Failed, ["Peer ended session"]);
-                },
-            );
+                session_ended: signaler.connect_closure(
+                    "session-ended",
+                    false,
+                    #[closure]
+                    move |#[watch] instance, _signaller: glib::Object, _peer_id: &str| {
+                        gst::debug!(CAT, "Session ended.");
+                        gst::element_error!(
+                            instance,
+                            gst::StreamError::Failed,
+                            ["Peer ended session"]
+                        );
+                    },
+                ),
 
-            // FIXME: signaler.connect_request_meta(
-            signaler.connect_closure(
-                "request-meta",
-                false,
-                #[closure]
-                move |#[watch] instance, _signaler: glib::Object| -> Option<gst::Structure> {
-                    let meta = instance.imp().meta.lock().unwrap().clone();
+                request_meta: signaler.connect_closure(
+                    "request-meta",
+                    false,
+                    #[closure]
+                    move |#[watch] instance, _signaler: glib::Object| -> Option<gst::Structure> {
+                        let meta = instance.imp().meta.lock().unwrap().clone();
 
-                    meta
-                },
-            );
+                        meta
+                    },
+                ),
 
-            // FIXME signaler.connect_sdp_offer(
-            signaler.connect_closure(
-                "sdp-offer",
-                false,
-                #[closure]
-                move |#[watch] instance,
-                      _signaler: glib::Object,
-                      _peer_id: &str,
-                      offer: &gst_webrtc::WebRTCSessionDescription| {
-                    instance.imp().handle_offer(offer);
-                },
-            );
+                sdp_offer: signaler.connect_closure(
+                    "sdp-offer",
+                    false,
+                    #[closure]
+                    move |#[watch] instance,
+                          _signaler: glib::Object,
+                          _peer_id: &str,
+                          offer: &gst_webrtc::WebRTCSessionDescription| {
+                        instance.imp().handle_offer(offer);
+                    },
+                ),
 
-            // sdp_mid is exposed for future proofing, see
-            // https://gitlab.freedesktop.org/gstreamer/gst-plugins-bad/-/issues/1174,
-            // at the moment sdp_m_line_index must be Some
-            signaler.connect_closure(
-                "handle-ice",
-                false,
-                #[closure]
-                move |#[watch] instance,
-                      _signaler: glib::Object,
-                      peer_id: &str,
-                      sdp_m_line_index: u32,
-                      _sdp_mid: Option<String>,
-                      candidate: &str| {
-                    instance
-                        .imp()
-                        .handle_ice(peer_id, Some(sdp_m_line_index), None, candidate);
-                },
-            );
+                // sdp_mid is exposed for future proofing, see
+                // https://gitlab.freedesktop.org/gstreamer/gst-plugins-bad/-/issues/1174,
+                // at the moment sdp_m_line_index must be Some
+                handle_ice: signaler.connect_closure(
+                    "handle-ice",
+                    false,
+                    #[closure]
+                    move |#[watch] instance,
+                          _signaler: glib::Object,
+                          peer_id: &str,
+                          sdp_m_line_index: u32,
+                          _sdp_mid: Option<String>,
+                          candidate: &str| {
+                        instance
+                            .imp()
+                            .handle_ice(peer_id, Some(sdp_m_line_index), None, candidate);
+                    },
+                ),
+            });
+
+            // previous signals are disconnected when dropping the old structure
         }
 
         fn handle_offer(&self, offer: &gst_webrtc::WebRTCSessionDescription) {
@@ -285,24 +308,56 @@ mod imp {
                     .formats()
                     .filter_map(|format| {
                         format
-                            .parse::<i32>()
-                            .map(|pt| {
-                                let mut tmpcaps = media.caps_from_media(pt).unwrap();
-                                tmpcaps
-                                    .get_mut()
-                                    .unwrap()
-                                    .structure_mut(0)
-                                    .unwrap()
-                                    .set_name("application/x-rtp");
+                                .parse::<i32>()
+                                .map(|pt| {
+                                    let mut tmpcaps = media.caps_from_media(pt).unwrap();
+                                    tmpcaps
+                                        .get_mut()
+                                        .unwrap()
+                                        .structure_mut(0)
+                                        .unwrap()
+                                        .set_name("application/x-rtp");
 
-                                tmpcaps.get_mut().unwrap().iter_mut().for_each(|s| {
-                                    s.set("rtcp-fb-transport-cc", &true);
-                                    s.set("extmap-1", "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01");
-                                });
+                                    // Activated twcc extension if offered
+                                    for attribute in media.attributes() {
+                                        if let Some(value) = attribute.value() {
+                                            match value
+                                                .split(" ")
+                                                .into_iter()
+                                                .collect::<Vec<&str>>()[..]
+                                            {
+                                                [k, v] => {
+                                                    if !v.contains(super::RTP_TWCC_URI) {
+                                                        continue;
+                                                    }
 
-                                tmpcaps
-                            })
-                            .ok()
+                                                    if let Ok(twcc_idx) = k.parse::<u32>() {
+                                                        tmpcaps
+                                                            .get_mut()
+                                                            .unwrap()
+                                                            .iter_mut()
+                                                            .for_each(|s| {
+                                                                s.set(
+                                                                    "rtcp-fb-transport-cc",
+                                                                    &true,
+                                                                );
+                                                                s.set(
+                                                                    &format!("extmap-{}", twcc_idx),
+                                                                    super::RTP_TWCC_URI,
+                                                                );
+                                                            });
+
+                                                        break;
+                                                    }
+                                                }
+                                                _ => (),
+                                            }
+                                        }
+                                    }
+
+                                    tmpcaps
+                                })
+                                .ok()
                     })
                     .collect::<Vec<gst::Caps>>();
 
@@ -366,12 +421,12 @@ mod imp {
             gst::log!(CAT, "Answer: {}", answer.sdp().to_string());
 
             let signaller = self.signaller();
-            signaller.handle_sdp(&answer);
+            signaller.send_sdp(None, &answer);
         }
 
         fn on_ice_candidate(&self, sdp_m_line_index: u32, candidate: String) {
             let signaller = self.signaller();
-            signaller.add_ice(&candidate, Some(sdp_m_line_index), None::<String>);
+            signaller.add_ice(None, &candidate, Some(sdp_m_line_index), None::<String>);
         }
 
         /// Called by the signaller with an ice candidate
@@ -401,7 +456,7 @@ mod imp {
             if state.signaller_state == SignallerState::Stopped
                 && instance.current_state() >= gst::State::Paused
             {
-                instance.signaller().start();
+                instance.signaller().vstart();
 
                 gst::info!(CAT, "Started signaller");
                 state.signaller_state = SignallerState::Started;
@@ -411,7 +466,7 @@ mod imp {
         fn maybe_stop_signaller(&self) {
             let mut state = self.state.lock().unwrap();
             if state.signaller_state == SignallerState::Started {
-                self.instance().signaller().stop();
+                self.instance().signaller().vstop();
                 state.signaller_state = SignallerState::Stopped;
                 gst::info!(CAT, "Stopped signaller");
             }
@@ -527,6 +582,7 @@ mod imp {
         signaller_state: SignallerState,
         webrtcbin: Option<gst::Element>,
         flow_combiner: gst_base::UniqueFlowCombiner,
+        signaller_signals: Option<SignallerSignals>,
     }
 
     impl Default for State {
@@ -535,6 +591,7 @@ mod imp {
                 signaller_state: SignallerState::Stopped,
                 webrtcbin: None,
                 flow_combiner: Default::default(),
+                signaller_signals: Default::default(),
             }
         }
     }
