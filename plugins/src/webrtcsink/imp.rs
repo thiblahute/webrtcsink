@@ -18,7 +18,7 @@ use std::sync::Mutex;
 
 use super::homegrown_cc::CongestionController;
 use super::{WebRTCSinkCongestionControl, WebRTCSinkError, WebRTCSinkMitigationMode};
-use crate::signaller::SinkSignaller;
+use crate::webrtcsrc::signaller::{prelude::*, Signallable, Signaller, WebRTCSignallerMode};
 use std::collections::BTreeMap;
 
 static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {
@@ -161,9 +161,20 @@ struct NavigationEvent {
     event: gst_video::NavigationEvent,
 }
 
+// Used to ensure signal are disconnected when a new signaller is is
+#[allow(dead_code)]
+struct SignallerSignals {
+    error: glib::SignalHandlerId,
+    request_meta: glib::SignalHandlerId,
+    session_requested: glib::SignalHandlerId,
+    session_ended: glib::SignalHandlerId,
+    sdp_answer: glib::SignalHandlerId,
+    handle_ice: glib::SignalHandlerId,
+}
+
 /* Our internal state */
 struct State {
-    signaller: Box<dyn super::SignallableObject>,
+    signaller: Signallable,
     signaller_state: SignallerState,
     consumers: HashMap<String, Consumer>,
     codecs: BTreeMap<i32, Codec>,
@@ -179,6 +190,7 @@ struct State {
     streams: HashMap<String, InputStream>,
     navigation_handler: Option<NavigationEventHandler>,
     mids: HashMap<String, String>,
+    signaller_signals: Option<SignallerSignals>,
 }
 
 fn create_navigation_event(sink: &super::WebRTCSink, msg: &str) {
@@ -270,10 +282,10 @@ impl Default for Settings {
 
 impl Default for State {
     fn default() -> Self {
-        let signaller = SinkSignaller::default();
+        let signaller = Signaller::new(WebRTCSignallerMode::Producer);
 
         Self {
-            signaller: Box::new(signaller),
+            signaller: signaller.upcast(),
             signaller_state: SignallerState::Stopped,
             consumers: HashMap::new(),
             codecs: BTreeMap::new(),
@@ -285,6 +297,7 @@ impl Default for State {
             streams: HashMap::new(),
             navigation_handler: None,
             mids: HashMap::new(),
+            signaller_signals: Default::default(),
         }
     }
 }
@@ -659,7 +672,7 @@ impl VideoEncoder {
 impl State {
     fn finalize_consumer(
         &mut self,
-        element: &super::WebRTCSink,
+        _element: &super::WebRTCSink,
         consumer: &mut Consumer,
         signal: bool,
     ) {
@@ -677,7 +690,7 @@ impl State {
         });
 
         if signal {
-            self.signaller.consumer_removed(element, &consumer.peer_id);
+            self.signaller.consumer_removed(&consumer.peer_id);
         }
     }
 
@@ -700,23 +713,13 @@ impl State {
             && element.current_state() >= gst::State::Paused
             && self.codec_discovery_done
         {
-            if let Err(err) = self.signaller.start(element) {
-                gst::error!(CAT, obj: element, "error: {}", err);
-                gst::element_error!(
-                    element,
-                    gst::StreamError::Failed,
-                    ["Failed to start signaller {}", err]
-                );
-            } else {
-                gst::info!(CAT, "Started signaller");
-                self.signaller_state = SignallerState::Started;
-            }
+            self.signaller.vstart();
         }
     }
 
-    fn maybe_stop_signaller(&mut self, element: &super::WebRTCSink) {
+    fn maybe_stop_signaller(&mut self, _element: &super::WebRTCSink) {
         if self.signaller_state == SignallerState::Started {
-            self.signaller.stop(element);
+            self.signaller.vstop();
             self.signaller_state = SignallerState::Stopped;
             gst::info!(CAT, "Stopped signaller");
         }
@@ -1173,10 +1176,87 @@ impl WebRTCSink {
         Ok(())
     }
 
+    fn connect_signaller(&self, signaler: &Signallable) {
+        let instance = self.instance();
+
+        let _ = self.state.lock().unwrap().signaller_signals.insert(SignallerSignals {
+            error: signaler.connect_closure(
+                "error",
+                false,
+                glib::closure!(@watch instance => move |_signaler: glib::Object, error: String| {
+                    gst::element_error!(
+                        instance,
+                        gst::StreamError::Failed,
+                        ["Signalling error: {}", error]
+                    );
+                })
+            ),
+
+            request_meta: signaler.connect_closure(
+                "request-meta",
+                false,
+                glib::closure!(@watch instance => move |_signaler: glib::Object| -> Option<gst::Structure> {
+                    let meta = instance.imp().settings.lock().unwrap().meta.clone();
+
+                    meta
+                })
+            ),
+
+            session_requested: signaler.connect_closure(
+                "session-requested",
+                false,
+                glib::closure!(@watch instance => move |_signaler: glib::Object, peer_id: &str|{
+                    if let Err(err) = instance.imp().add_consumer(instance, peer_id) {
+                        gst::warning!(CAT, "{}", err);
+                    }
+                })
+            ),
+
+            sdp_answer: signaler.connect_closure(
+                "sdp-answer",
+                false,
+                glib::closure!(@watch instance => move |
+                        _signaler: glib::Object,
+                        peer_id: &str,
+                        answer: &gst_webrtc::WebRTCSessionDescription| {
+                        instance.imp().handle_sdp_answer(instance, peer_id, answer);
+                    }
+                ),
+            ),
+
+            handle_ice: signaler.connect_closure(
+                    "handle-ice",
+                    false,
+                    glib::closure!(@watch instance => move |
+                        _signaler: glib::Object,
+                        peer_id: &str,
+                        sdp_m_line_index: u32,
+                        _sdp_mid: Option<String>,
+                        candidate: &str| {
+                        instance
+                            .imp()
+                            .handle_ice(peer_id, Some(sdp_m_line_index), None, candidate);
+                    }),
+                ),
+
+            session_ended: signaler.connect_closure(
+                "session-ended",
+                false,
+                glib::closure!(@watch instance => move |_signaler: glib::Object, peer_id: &str|{
+                    if let Err(err) = instance.imp().remove_consumer(instance, peer_id, false) {
+                        gst::warning!(CAT, "{}", err);
+                    }
+                })
+            ),
+        });
+    }
+
     /// When using a custom signaller
-    pub fn set_signaller(&self, signaller: Box<dyn super::SignallableObject>) -> Result<(), Error> {
+    pub fn set_signaller(&self, signaller: Signallable) -> Result<(), Error> {
+        let sigobj = signaller.clone();
         let mut state = self.state.lock().unwrap();
 
+        self.connect_signaller(&sigobj);
         state.signaller = signaller;
 
         Ok(())
@@ -1195,27 +1275,18 @@ impl WebRTCSink {
 
     fn on_offer_created(
         &self,
-        element: &super::WebRTCSink,
+        _element: &super::WebRTCSink,
         offer: gst_webrtc::WebRTCSessionDescription,
         peer_id: &str,
     ) {
-        let mut state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap();
 
         if let Some(consumer) = state.consumers.get(peer_id) {
             consumer
                 .webrtcbin
                 .emit_by_name::<()>("set-local-description", &[&offer, &None::<gst::Promise>]);
 
-            if let Err(err) = state.signaller.handle_sdp(element, peer_id, &offer) {
-                gst::warning!(
-                    CAT,
-                    "Failed to handle SDP for consumer {}: {}",
-                    peer_id,
-                    err
-                );
-
-                state.remove_consumer(element, peer_id, true);
-            }
+            state.signaller.send_sdp(Some(peer_id), &offer);
         }
     }
 
@@ -1290,26 +1361,15 @@ impl WebRTCSink {
 
     fn on_ice_candidate(
         &self,
-        element: &super::WebRTCSink,
+        _element: &super::WebRTCSink,
         peer_id: String,
         sdp_m_line_index: u32,
         candidate: String,
     ) {
-        let mut state = self.state.lock().unwrap();
-        if let Err(err) =
-            state
-                .signaller
-                .handle_ice(element, &peer_id, &candidate, Some(sdp_m_line_index), None)
-        {
-            gst::warning!(
-                CAT,
-                "Failed to handle ICE for consumer {}: {}",
-                peer_id,
-                err
-            );
-
-            state.remove_consumer(element, &peer_id, true);
-        }
+        let state = self.state.lock().unwrap();
+        state
+            .signaller
+            .add_ice(Some(&peer_id), &candidate, Some(sdp_m_line_index), None)
     }
 
     /// Called by the signaller to add a new consumer
@@ -1851,34 +1911,38 @@ impl WebRTCSink {
     /// Called by the signaller with an ice candidate
     pub fn handle_ice(
         &self,
-        _element: &super::WebRTCSink,
         peer_id: &str,
         sdp_m_line_index: Option<u32>,
         _sdp_mid: Option<String>,
         candidate: &str,
-    ) -> Result<(), WebRTCSinkError> {
+    ) {
         let state = self.state.lock().unwrap();
 
-        let sdp_m_line_index = sdp_m_line_index.ok_or(WebRTCSinkError::MandatorySdpMlineIndex)?;
+        let sdp_m_line_index = match sdp_m_line_index {
+            Some(sdp_m_line_index) => sdp_m_line_index,
+            None => {
+                gst::warning!(CAT, "No mandatory SDP m-line index");
+                return;
+            }
+        };
 
         if let Some(consumer) = state.consumers.get(peer_id) {
             gst::trace!(CAT, "adding ice candidate for peer {}", peer_id);
             consumer
                 .webrtcbin
                 .emit_by_name::<()>("add-ice-candidate", &[&sdp_m_line_index, &candidate]);
-            Ok(())
         } else {
-            Err(WebRTCSinkError::NoConsumerWithId(peer_id.to_string()))
+            gst::warning!(CAT, "No consumer with ID {peer_id}");
         }
     }
 
     /// Called by the signaller with an answer to our offer
-    pub fn handle_sdp(
+    pub fn handle_sdp_answer(
         &self,
         element: &super::WebRTCSink,
         peer_id: &str,
         desc: &gst_webrtc::WebRTCSessionDescription,
-    ) -> Result<(), WebRTCSinkError> {
+    ) {
         let mut state = self.state.lock().unwrap();
 
         if let Some(consumer) = state.consumers.get_mut(peer_id) {
@@ -1905,10 +1969,7 @@ impl WebRTCSink {
                         );
                         state.remove_consumer(element, peer_id, true);
 
-                        return Err(WebRTCSinkError::ConsumerRefusedMedia {
-                            peer_id: peer_id.to_string(),
-                            media_idx,
-                        });
+                        return;
                     }
                 }
 
@@ -1928,10 +1989,7 @@ impl WebRTCSink {
 
                     state.remove_consumer(element, peer_id, true);
 
-                    return Err(WebRTCSinkError::ConsumerNoValidPayload {
-                        peer_id: peer_id.to_string(),
-                        media_idx,
-                    });
+                    return;
                 }
             }
 
@@ -1950,10 +2008,8 @@ impl WebRTCSink {
             consumer
                 .webrtcbin
                 .emit_by_name::<()>("set-remote-description", &[desc, &promise]);
-
-            Ok(())
         } else {
-            Err(WebRTCSinkError::NoConsumerWithId(peer_id.to_string()))
+            gst::warning!(CAT, "No consumer with ID {peer_id}");
         }
     }
 
@@ -2570,7 +2626,9 @@ impl ObjectImpl for WebRTCSink {
 
     fn constructed(&self, obj: &Self::Type) {
         self.parent_constructed(obj);
+        let signaller = self.state.lock().unwrap().signaller.clone();
 
+        self.connect_signaller(&signaller);
         obj.set_suppressed_flags(gst::ElementFlags::SINK | gst::ElementFlags::SOURCE);
         obj.set_element_flags(gst::ElementFlags::SINK);
     }
@@ -2736,15 +2794,7 @@ impl ChildProxyImpl for WebRTCSink {
 
     fn child_by_name(&self, _object: &Self::Type, name: &str) -> Option<glib::Object> {
         match name {
-            "signaller" => Some(
-                self.state
-                    .lock()
-                    .unwrap()
-                    .signaller
-                    .as_ref()
-                    .as_ref()
-                    .clone(),
-            ),
+            "signaller" => Some(self.state.lock().unwrap().signaller.clone().upcast()),
             _ => None,
         }
     }
