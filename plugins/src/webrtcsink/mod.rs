@@ -2,8 +2,6 @@ use crate::signaller::Signallable;
 use gst::glib;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
-use std::error::Error;
-use crate::webrtcsrc::signaller::Signallable;
 
 mod homegrown_cc;
 

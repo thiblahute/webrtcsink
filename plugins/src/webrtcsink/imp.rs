@@ -18,7 +18,7 @@ use std::sync::Mutex;
 
 use super::homegrown_cc::CongestionController;
 use super::{WebRTCSinkCongestionControl, WebRTCSinkError, WebRTCSinkMitigationMode};
-use crate::webrtcsrc::signaller::{prelude::*, Signallable, Signaller, WebRTCSignallerMode};
+use crate::signaller::{prelude::*, Signallable, Signaller, WebRTCSignallerMode};
 use std::collections::BTreeMap;
 
 static CAT: Lazy<gst::DebugCategory> = Lazy::new(|| {

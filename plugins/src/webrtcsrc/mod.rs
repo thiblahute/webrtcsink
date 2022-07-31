@@ -1,7 +1,5 @@
 use gst::prelude::*;
 
-pub mod signaller;
-
 const RTP_TWCC_URI: &str =
     "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
 
@@ -16,7 +14,7 @@ const RTP_TWCC_URI: &str =
     pad_templates(src__u(presence = "Sometimes", caps = "application/x-rtp"),)
 )]
 mod imp {
-    use crate::webrtcsrc::signaller::{prelude::*, Signallable, Signaller};
+    use crate::signaller::{prelude::*, Signallable, Signaller};
     use anyhow::{Context, Error};
     use gst::glib;
     use gst::prelude::*;

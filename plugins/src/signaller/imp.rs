@@ -11,8 +11,8 @@ pub enum WebRTCSignallerMode {
 
 #[gobject::class(final, extends(gst::Object), implements(super::Signallable), sync)]
 mod implement {
+    use crate::signaller::{prelude::*, Signallable};
     use crate::utils::{gvalue_to_json, serialize_json_object};
-    use crate::webrtcsrc::signaller::{prelude::*, Signallable};
     use anyhow::{anyhow, Error};
     use async_std::{future::timeout, task};
     use async_tungstenite::tungstenite::Message as WsMessage;

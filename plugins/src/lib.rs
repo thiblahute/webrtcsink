@@ -1,6 +1,7 @@
 use gst::glib;
 
 pub mod gcc;
+pub mod signaller;
 pub mod utils;
 pub mod webrtcsink;
 pub mod webrtcsrc;
