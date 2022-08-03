@@ -218,9 +218,9 @@ pub enum PeerMessage {
 /// End a session
 pub enum EndSessionMessage {
     #[serde(rename_all = "camelCase")]
-    Consumer{peer_id: String},
+    Consumer { peer_id: String },
     #[serde(rename_all = "camelCase")]
-    Producer{peer_id: String},
+    Producer { peer_id: String },
 }
 
 #[derive(Serialize, Deserialize, Debug)]

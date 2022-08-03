@@ -138,12 +138,17 @@ impl SinkSignaller {
                                             gst::warning!(CAT, obj: &element, "{}", err);
                                         }
                                     }
-                                    p::OutgoingMessage::EndSession(p::EndSessionMessage::Consumer{peer_id}) => {
+                                    p::OutgoingMessage::EndSession(
+                                        p::EndSessionMessage::Consumer { peer_id },
+                                    ) => {
                                         if let Err(err) = element.remove_consumer(&peer_id) {
                                             gst::warning!(CAT, obj: &element, "{}", err);
                                         }
                                     }
-                                    p::OutgoingMessage::Peer(p::PeerMessage::Consumer(info) | p::PeerMessage::Producer(info) ) => match info.peer_message {
+                                    p::OutgoingMessage::Peer(
+                                        p::PeerMessage::Consumer(info)
+                                        | p::PeerMessage::Producer(info),
+                                    ) => match info.peer_message {
                                         p::PeerMessageInner::Sdp(p::SdpMessage::Answer { sdp }) => {
                                             if let Err(err) = element.handle_sdp(
                                                 &info.peer_id,
@@ -256,14 +261,12 @@ impl SinkSignaller {
     ) {
         let state = self.state.lock().unwrap();
 
-        let msg = p::IncomingMessage::Peer(p::PeerMessage::Producer(
-            p::PeerMessageInfo {
-                peer_id: peer_id.to_string(),
-                peer_message: p::PeerMessageInner::Sdp(p::SdpMessage::Offer {
-                    sdp: sdp.sdp().as_text().unwrap(),
-                }),
-            }
-        ));
+        let msg = p::IncomingMessage::Peer(p::PeerMessage::Producer(p::PeerMessageInfo {
+            peer_id: peer_id.to_string(),
+            peer_message: p::PeerMessageInner::Sdp(p::SdpMessage::Offer {
+                sdp: sdp.sdp().as_text().unwrap(),
+            }),
+        }));
 
         if let Some(mut sender) = state.websocket_sender.clone() {
             let element = element.downgrade();
@@ -287,15 +290,13 @@ impl SinkSignaller {
     ) {
         let state = self.state.lock().unwrap();
 
-        let msg = p::IncomingMessage::Peer(p::PeerMessage::Producer(
-            p::PeerMessageInfo {
-                peer_id: peer_id.to_string(),
-                peer_message: p::PeerMessageInner::Ice {
-                    candidate: candidate.to_string(),
-                    sdp_m_line_index: sdp_m_line_index.unwrap(),
-                },
-            }
-        ));
+        let msg = p::IncomingMessage::Peer(p::PeerMessage::Producer(p::PeerMessageInfo {
+            peer_id: peer_id.to_string(),
+            peer_message: p::PeerMessageInner::Ice {
+                candidate: candidate.to_string(),
+                sdp_m_line_index: sdp_m_line_index.unwrap(),
+            },
+        }));
 
         if let Some(mut sender) = state.websocket_sender.clone() {
             let element = element.downgrade();
@@ -341,9 +342,11 @@ impl SinkSignaller {
         if let Some(mut sender) = state.websocket_sender.clone() {
             task::spawn(async move {
                 if let Err(err) = sender
-                    .send(p::IncomingMessage::EndSession(p::EndSessionMessage::Consumer{
-                        peer_id: peer_id.to_string(),
-                    }))
+                    .send(p::IncomingMessage::EndSession(
+                        p::EndSessionMessage::Consumer {
+                            peer_id: peer_id.to_string(),
+                        },
+                    ))
                     .await
                 {
                     if let Some(element) = element.upgrade() {

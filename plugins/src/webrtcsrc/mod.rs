@@ -14,12 +14,12 @@ mod signaller;
 )]
 mod imp {
     use crate::webrtcsrc::signaller::{prelude::*, Signallable, Signaller};
-    use std::ops::ControlFlow;
     use anyhow::{Context, Error};
     use gst::glib;
     use gst::prelude::*;
     use gst::subclass::prelude::*;
     use once_cell::sync::Lazy;
+    use std::ops::ControlFlow;
     use std::str::FromStr;
     use std::sync::Mutex;
     use url::Url;
@@ -199,11 +199,7 @@ mod imp {
             pad: &gst::Pad,
         ) -> Result<(), glib::error::BoolError> {
             let caps = pad.current_caps().unwrap();
-            gst::info!(
-                CAT,
-                "Pad added with caps: {}",
-                caps.to_string()
-            );
+            gst::info!(CAT, "Pad added with caps: {}", caps.to_string());
             let template = instance.pad_template("src_%u").unwrap();
             let name = format!("src_{}", instance.src_pads().len());
             let src_pad = gst::GhostPad::builder_with_template(&template, Some(&name))
@@ -221,9 +217,16 @@ mod imp {
                         _ => return pad.event_default(parent, event),
                     };
 
-                    let collection = match instance.imp().state.lock().unwrap().stream_collection.clone() {
+                    let collection = match instance
+                        .imp()
+                        .state
+                        .lock()
+                        .unwrap()
+                        .stream_collection
+                        .clone()
+                    {
                         Some(c) => c,
-                        _ => return pad.event_default(parent, event)
+                        _ => return pad.event_default(parent, event),
                     };
 
                     // Match the pad with a GstStream in our collection
@@ -231,34 +234,48 @@ mod imp {
                         if !caps.is_subset(&stream.caps().unwrap()) {
                             return false;
                         }
-                        instance.src_pads().iter().find(|pad|{
-                            let mut already_used = false;
+                        instance
+                            .src_pads()
+                            .iter()
+                            .find(|pad| {
+                                let mut already_used = false;
 
-                            pad.sticky_events_foreach(|event| {
-                                if let gst::EventView::StreamStart(stream_start) = event.view() {
-                                    if Some(stream_start.stream_id().into()) == stream.stream_id() {
-                                        already_used = true;
-                                        ControlFlow::Break(gst::EventForeachAction::Keep)
+                                pad.sticky_events_foreach(|event| {
+                                    if let gst::EventView::StreamStart(stream_start) = event.view()
+                                    {
+                                        if Some(stream_start.stream_id().into())
+                                            == stream.stream_id()
+                                        {
+                                            already_used = true;
+                                            ControlFlow::Break(gst::EventForeachAction::Keep)
+                                        } else {
+                                            ControlFlow::Continue(gst::EventForeachAction::Keep)
+                                        }
                                     } else {
                                         ControlFlow::Continue(gst::EventForeachAction::Keep)
                                     }
-                                } else {
-                                    ControlFlow::Continue(gst::EventForeachAction::Keep)
-                                }
-                            });
+                                });
 
-                            already_used == false
-                        }).is_some()
+                                already_used == false
+                            })
+                            .is_some()
                     });
 
-                    let event = stream.map_or_else(|| event.clone(), |stream| {
-                        let stream_id = stream.stream_id().unwrap();
-                        gst::event::StreamStart::builder(stream_id.as_str())
-                            .stream(stream)
-                            .seqnum(stream_start.seqnum())
-                            .group_id(stream_start.group_id().unwrap_or_else(|| gst::GroupId::next()))
-                            .build()
-                    });
+                    let event = stream.map_or_else(
+                        || event.clone(),
+                        |stream| {
+                            let stream_id = stream.stream_id().unwrap();
+                            gst::event::StreamStart::builder(stream_id.as_str())
+                                .stream(stream)
+                                .seqnum(stream_start.seqnum())
+                                .group_id(
+                                    stream_start
+                                        .group_id()
+                                        .unwrap_or_else(|| gst::GroupId::next()),
+                                )
+                                .build()
+                        },
+                    );
 
                     pad.event_default(parent, event)
                 })
@@ -441,7 +458,8 @@ mod imp {
                 }
                 gst::info!(CAT, "Adding transceiver with caps: {}", caps.to_string());
 
-                let transceiver = webrtcbin.emit_by_name::<gst::Object>("add-transceiver", &[&direction, &caps]);
+                let transceiver =
+                    webrtcbin.emit_by_name::<gst::Object>("add-transceiver", &[&direction, &caps]);
                 transceiver.set_property("do-nack", &true);
             }
 
@@ -484,39 +502,40 @@ mod imp {
 
             let collection = gst::StreamCollection::builder(None)
                 .streams(
-                    &sdp.medias().map(|media| {
-
-                        let formats = media.formats().collect::<Vec<_>>();
-                        assert!(formats.len() == 1);
-                        let caps = formats.get(0).unwrap().parse::<i32>().map_or(None,
-                            |pt| {
+                    &sdp.medias()
+                        .map(|media| {
+                            let formats = media.formats().collect::<Vec<_>>();
+                            assert!(formats.len() == 1);
+                            let caps = formats.get(0).unwrap().parse::<i32>().map_or(None, |pt| {
                                 let mut caps = media.caps_from_media(pt).unwrap();
-                                caps
-                                    .get_mut()
+                                caps.get_mut()
                                     .unwrap()
                                     .structure_mut(0)
                                     .unwrap()
                                     .set_name("application/x-rtp");
 
                                 Some(caps)
-                        });
+                            });
 
-                        gst::Stream::new(None, caps.as_ref(),
-                            match media.media() {
-                                Some("video") => gst::StreamType::VIDEO,
-                                Some("audio") => gst::StreamType::AUDIO,
-                                _ => gst::StreamType::UNKNOWN,
-                            },
-                            gst::StreamFlags::empty(),
-                        )
-
-                    }).collect::<Vec<gst::Stream>>()
+                            gst::Stream::new(
+                                None,
+                                caps.as_ref(),
+                                match media.media() {
+                                    Some("video") => gst::StreamType::VIDEO,
+                                    Some("audio") => gst::StreamType::AUDIO,
+                                    _ => gst::StreamType::UNKNOWN,
+                                },
+                                gst::StreamFlags::empty(),
+                            )
+                        })
+                        .collect::<Vec<gst::Stream>>(),
                 )
                 .build();
 
-            if let Err(err) = self.instance().post_message(
-                gst::message::StreamCollection::new(&collection)
-            ) {
+            if let Err(err) = self
+                .instance()
+                .post_message(gst::message::StreamCollection::new(&collection))
+            {
                 gst::error!(CAT, "Could not post stream collection: {:?}", err);
             }
             self.state.lock().unwrap().stream_collection = Some(collection);

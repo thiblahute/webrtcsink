@@ -422,15 +422,13 @@ mod implement {
             _sdp_mid: Option<String>,
         ) {
             let peer_id = self.peer_id();
-            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(
-                p::PeerMessageInfo {
-                    peer_id: peer_id.unwrap(),
-                    peer_message: p::PeerMessageInner::Ice {
-                        candidate: candidate.to_string(),
-                        sdp_m_line_index: sdp_m_line_index.unwrap(),
-                    },
-                }
-            ));
+            let msg = p::IncomingMessage::Peer(p::PeerMessage::Consumer(p::PeerMessageInfo {
+                peer_id: peer_id.unwrap(),
+                peer_message: p::PeerMessageInner::Ice {
+                    candidate: candidate.to_string(),
+                    sdp_m_line_index: sdp_m_line_index.unwrap(),
+                },
+            }));
             self.send(msg);
         }
     }
