@@ -504,17 +504,24 @@ mod imp {
                 .streams(
                     &sdp.medias()
                         .map(|media| {
-                            let formats = media.formats().collect::<Vec<_>>();
-                            assert!(formats.len() == 1);
-                            let caps = formats.get(0).unwrap().parse::<i32>().map_or(None, |pt| {
-                                let mut caps = media.caps_from_media(pt).unwrap();
-                                caps.get_mut()
-                                    .unwrap()
-                                    .structure_mut(0)
-                                    .unwrap()
-                                    .set_name("application/x-rtp");
+                            let caps = media.formats().find_map(|format| {
+                                format.parse::<i32>().map_or(None, |pt| {
+                                    media.caps_from_media(pt).map_or(None, |mut caps| {
+                                        // apt: associated payload type. The value of this parameter is the
+                                        // payload type of the associated original stream.
+                                        if caps.structure(0).unwrap().has_field("apt") {
+                                            None
+                                        } else {
+                                            caps.get_mut()
+                                                .unwrap()
+                                                .structure_mut(0)
+                                                .unwrap()
+                                                .set_name("application/x-rtp");
 
-                                Some(caps)
+                                            Some(caps)
+                                        }
+                                    })
+                                })
                             });
 
                             gst::Stream::new(
