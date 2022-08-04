@@ -196,7 +196,11 @@ impl Handler {
             producers.iter().for_each(|producer_id| {
                 info!(producer_id=%producer_id, consumer_id=%peer_id, "ended session");
 
-                self.producers.get_mut(producer_id).unwrap().remove(peer_id);
+                // The producer can have been removed and we are finalizing the session
+                // afterward
+                if let Some(consumers) = self.producers.get_mut(producer_id) {
+                    consumers.remove(peer_id);
+                }
 
                 self.items.push_back((
                     producer_id.to_string(),
