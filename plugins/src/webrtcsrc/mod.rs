@@ -24,6 +24,8 @@ mod imp {
     use once_cell::sync::Lazy;
     use std::ops::ControlFlow;
     use std::str::FromStr;
+    use std::sync::atomic::AtomicU16;
+    use std::sync::atomic::Ordering;
     use std::sync::Mutex;
     use url::Url;
 
@@ -54,6 +56,7 @@ mod imp {
         #[property(get, set, blurb = "Names of usable audio codecs")]
         audio_codecs: Mutex<gst::Array>,
 
+        n_pads: AtomicU16,
         state: Mutex<State>,
     }
 
@@ -64,6 +67,7 @@ mod imp {
             Self {
                 stun_server: Mutex::new("stun://stun.l.google.com:19302".to_string()),
                 state: Default::default(),
+                n_pads: Default::default(),
                 signaller: Mutex::new(signaller.upcast()),
                 meta: Default::default(),
                 audio_codecs: Mutex::new(gst::Array::from_values(["OPUS".into()])),
@@ -152,7 +156,7 @@ mod imp {
             let caps = pad.current_caps().unwrap();
             gst::info!(CAT, "Pad added with caps: {}", caps.to_string());
             let template = instance.pad_template("src_%u").unwrap();
-            let name = format!("src_{}", instance.src_pads().len());
+            let name = format!("src_{}", self.n_pads.fetch_add(1, Ordering::SeqCst));
             let src_pad = gst::GhostPad::builder_with_template(&template, Some(&name))
                 .proxy_pad_chain_function(move |#[weak(or_panic)] instance, pad, parent, buffer| {
                     let this = instance.imp();
