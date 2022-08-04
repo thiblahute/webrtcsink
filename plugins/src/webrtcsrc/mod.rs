@@ -156,7 +156,8 @@ mod imp {
             let caps = pad.current_caps().unwrap();
             gst::info!(CAT, "Pad added with caps: {}", caps.to_string());
             let template = instance.pad_template("src_%u").unwrap();
-            let name = format!("src_{}", self.n_pads.fetch_add(1, Ordering::SeqCst));
+            let pad_num = self.n_pads.fetch_add(1, Ordering::SeqCst);
+            let name = format!("src_{}", pad_num);
             let src_pad = gst::GhostPad::builder_with_template(&template, Some(&name))
                 .proxy_pad_chain_function(move |#[weak(or_panic)] instance, pad, parent, buffer| {
                     let this = instance.imp();
@@ -186,8 +187,13 @@ mod imp {
 
                     // Match the pad with a GstStream in our collection
                     let stream = collection.iter().find(|stream| {
-                        if !caps.is_subset(&stream.caps().unwrap()) {
-                            return false;
+                        match stream.caps() {
+                            Some(stream_caps) => {
+                                if !caps.is_subset(&stream_caps) {
+                                    return false;
+                                }
+                            }
+                            _ => return false,
                         }
                         instance
                             .src_pads()
@@ -242,6 +248,18 @@ mod imp {
             if res.is_ok() {
                 if let Some(collection) = self.state.lock().unwrap().stream_collection.clone() {
                     src_pad.push_event(gst::event::StreamCollection::builder(&collection).build());
+                    let num_media_streams = collection
+                        .iter()
+                        .filter(|stream| {
+                            !(stream.stream_type()
+                                & (gst::StreamType::VIDEO | gst::StreamType::AUDIO))
+                                .is_empty()
+                        })
+                        .count() as u16;
+
+                    if pad_num + 1 == num_media_streams {
+                        instance.no_more_pads();
+                    }
                 }
             }
 
@@ -499,43 +517,47 @@ mod imp {
             let sdp = answer.sdp();
             gst::log!(CAT, "Answer: {}", sdp.to_string());
 
-            let collection = gst::StreamCollection::builder(None)
-                .streams(
-                    &sdp.medias()
-                        .map(|media| {
-                            let caps = media.formats().find_map(|format| {
-                                format.parse::<i32>().map_or(None, |pt| {
-                                    media.caps_from_media(pt).map_or(None, |mut caps| {
-                                        // apt: associated payload type. The value of this parameter is the
-                                        // payload type of the associated original stream.
-                                        if caps.structure(0).unwrap().has_field("apt") {
-                                            None
-                                        } else {
-                                            caps.get_mut()
-                                                .unwrap()
-                                                .structure_mut(0)
-                                                .unwrap()
-                                                .set_name("application/x-rtp");
-
-                                            Some(caps)
-                                        }
-                                    })
-                                })
-                            });
-
-                            gst::Stream::new(
-                                None,
-                                caps.as_ref(),
-                                match media.media() {
-                                    Some("video") => gst::StreamType::VIDEO,
-                                    Some("audio") => gst::StreamType::AUDIO,
-                                    _ => gst::StreamType::UNKNOWN,
-                                },
-                                gst::StreamFlags::empty(),
-                            )
+            let streams = &sdp
+                .medias()
+                .map(|media| {
+                    let caps = media.formats().find_map(|format| {
+                        format.parse::<i32>().map_or(None, |pt| {
+                            media.caps_from_media(pt).map_or(None, |mut caps| {
+                                // apt: associated payload type. The value of this parameter is the
+                                // payload type of the associated original stream.
+                                // Sometimes "apt" == "format" meaning that the format is
+                                // the original stream
+                                let apt = caps.structure(0).unwrap().get::<&str>("apt").ok();
+                                if format != apt.unwrap_or(format) {
+                                    None
+                                } else {
+                                    caps.get_mut()
+                                        .unwrap()
+                                        .structure_mut(0)
+                                        .unwrap()
+                                        .set_name("application/x-rtp");
+                                    Some(caps)
+                                }
+                            })
                         })
-                        .collect::<Vec<gst::Stream>>(),
-                )
+                    });
+
+                    let stream_type = match media.media() {
+                        Some("video") => gst::StreamType::VIDEO,
+                        Some("audio") => gst::StreamType::AUDIO,
+                        _ => gst::StreamType::UNKNOWN,
+                    };
+
+                    if caps.is_none() && stream_type != gst::StreamType::UNKNOWN {
+                        gst::warning!(CAT, "No caps for known stream type: {:?}", media);
+                    }
+
+                    gst::Stream::new(None, caps.as_ref(), stream_type, gst::StreamFlags::empty())
+                })
+                .collect::<Vec<gst::Stream>>();
+
+            let collection = gst::StreamCollection::builder(None)
+                .streams(streams)
                 .build();
 
             if let Err(err) = self
