@@ -5,7 +5,7 @@ pub mod signaller;
 const RTP_TWCC_URI: &str =
     "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
 
-#[gobject::gst_element(
+#[gst_objects::element(
     class(final, extends(gst::Bin), implements(gst::ChildProxy, gst::URIHandler)),
     factory_name = "webrtcsrc",
     rank = "Primary",

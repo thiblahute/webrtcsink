@@ -1,3 +1,4 @@
+use crate::signaller::Signallable;
 use gst::glib;
 use gst::prelude::*;
 use gst::subclass::prelude::*;
