@@ -19,7 +19,7 @@ gst-rtp = { path="../../../gstreamer-rs/gstreamer-rtp", features = ["v1_20"], pa
 gst-utils = { path="../../../gstreamer-rs/gstreamer-utils", package="gstreamer-utils"}
 gst-objects = {path="../../../gstreamer-rs/gstreamer-objects", package="gstreamer-objects"}
 
-gobject = { path="/home/thiblahute/devel/misc/gobject", features = ["use_gst"] }
+gobject = { path="/home/thiblahute/devel/misc/gobject" }
 
 once_cell = "1.0"
 chrono = { version = "0.4", default-features = false }
