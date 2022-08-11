@@ -17,7 +17,7 @@ gst-webrtc = { path="../../../gstreamer-rs/gstreamer-webrtc", features = ["v1_20
 gst-sdp = { path="../../../gstreamer-rs/gstreamer-sdp", features = ["v1_20"], package="gstreamer-sdp"}
 gst-rtp = { path="../../../gstreamer-rs/gstreamer-rtp", features = ["v1_20"], package="gstreamer-rtp"}
 gst-utils = { path="../../../gstreamer-rs/gstreamer-utils", package="gstreamer-utils"}
-gst-objects = {path="../../../gstreamer-rs/gstreamer-objects", package="gstreamer-objects"}
+gstreamer-objects = {path="../../../gstreamer-rs/gstreamer-objects", package="gstreamer-objects"}
 
 gobject = { path="/home/thiblahute/devel/misc/gobject" }
 

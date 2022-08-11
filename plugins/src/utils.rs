@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use gobject::glib::prelude::*;
 use gst::{glib, prelude::*};
 
 pub fn gvalue_to_json(val: &gst::glib::Value) -> Option<serde_json::Value> {

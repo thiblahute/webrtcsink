@@ -1,11 +1,11 @@
-use gst::{glib, prelude::*};
+use gst::prelude::*;
 
 pub mod signaller;
 
 const RTP_TWCC_URI: &str =
     "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01";
 
-#[gst_objects::element(
+#[gstreamer_objects::element(
     class(final, extends(gst::Bin), implements(gst::ChildProxy, gst::URIHandler)),
     factory_name = "webrtcsrc",
     rank = "Primary",
