@@ -9,15 +9,14 @@ repository = "https://github.com/centricular/webrtcsink/"
 build = "build.rs"
 
 [dependencies]
-gst = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer", features = ["v1_20", "ser_de"], rev="origin/gobject_macro" }
-gst-app = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-app", features = ["v1_20"], rev="origin/gobject_macro" }
-gst-base = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-base", rev="origin/gobject_macro" }
-gst-video = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-video", features = ["v1_20", "ser_de"], rev="origin/gobject_macro" }
-gst-webrtc = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-webrtc", features = ["v1_20"], rev="origin/gobject_macro" }
-gst-sdp = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-sdp", features = ["v1_20"], rev="origin/gobject_macro" }
-gst-rtp = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-rtp", features = ["v1_20"], rev="origin/gobject_macro" }
-gst-utils = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-utils", rev="origin/gobject_macro" }
-gstreamer-objects = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-objects", rev="origin/gobject_macro" }
+gst = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer", features = ["v1_20", "ser_de"], rev="origin/element_procmacro" }
+gst-app = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-app", features = ["v1_20"], rev="origin/element_procmacro" }
+gst-base = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-base", rev="origin/element_procmacro" }
+gst-video = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-video", features = ["v1_20", "ser_de"], rev="origin/element_procmacro" }
+gst-webrtc = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-webrtc", features = ["v1_20"], rev="origin/element_procmacro" }
+gst-sdp = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-sdp", features = ["v1_20"], rev="origin/element_procmacro" }
+gst-rtp = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-rtp", features = ["v1_20"], rev="origin/element_procmacro" }
+gst-utils = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-utils", rev="origin/element_procmacro" }
 gobject = { git="https://github.com/thiblahute/gobject", rev="origin/external_gst" }
 
 once_cell = "1.0"
