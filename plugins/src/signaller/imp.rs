@@ -18,6 +18,7 @@ mod implement {
     use async_tungstenite::tungstenite::Message as WsMessage;
     use futures::channel::mpsc;
     use futures::prelude::*;
+    use gst::glib;
     use gst::glib::prelude::*;
     use gst::subclass::prelude::*;
     use std::str::FromStr;

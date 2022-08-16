@@ -9,7 +9,7 @@ repository = "https://github.com/centricular/webrtcsink/"
 build = "build.rs"
 
 [dependencies]
-gst = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer", features = ["v1_20", "ser_de"], rev="origin/element_procmacro" }
+gst = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer", features = ["v1_20", "ser_de", "class_macros"], rev="origin/element_procmacro" }
 gst-app = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-app", features = ["v1_20"], rev="origin/element_procmacro" }
 gst-base = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-base", rev="origin/element_procmacro" }
 gst-video = { git="https://gitlab.freedesktop.org/thiblahute/gstreamer-rs", package = "gstreamer-video", features = ["v1_20", "ser_de"], rev="origin/element_procmacro" }

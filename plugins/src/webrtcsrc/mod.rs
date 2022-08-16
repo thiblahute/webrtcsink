@@ -11,7 +11,10 @@ const RTP_TWCC_URI: &str =
     classification = "Source/Network/WebRTC",
     description = "WebRTC Src",
     author = "Thibault Saunier <tsaunier@igalia.com>",
-    pad_templates(src__u(presence = "Sometimes", caps = "application/x-rtp"),)
+    pad_templates(src__u(
+        presence = "Sometimes",
+        caps = r#"gst::Caps::builder("application/x-rtp").build()"#,
+    ))
 )]
 mod imp {
     use crate::signaller::{prelude::*, Signallable, Signaller};

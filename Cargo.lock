@@ -181,6 +181,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a40729d2133846d9ed0ea60a8b9541bccddab49cd30f0715a1da672fe9a2524"
 
 [[package]]
+name = "async-trait"
+version = "0.1.57"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76464446b8bc32758d7e88ee1a804d9914cd9b1cb264c029899680b0be29826f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "async-tungstenite"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -415,6 +426,41 @@ version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdffe87e1d521a10f9696f833fe502293ea446d7f256c06128293a4119bdf4cb"
 dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "darling"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a01d95850c592940db9b8194bc39f4bc0e89dee5c4265e4b1807c34a9aba453c"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "859d65a907b6852c9361e3185c862aae7fafd2887876799fa55f5f99dc40d610"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
+dependencies = [
+ "darling_core",
  "quote",
  "syn",
 ]
@@ -656,6 +702,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "gobject"
+version = "0.1.0"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/external_gst#acc8c735a7b9432e6f4357c5c72c07123a2e345b"
+dependencies = [
+ "async-trait",
+ "glib",
+ "gobject-macros",
+]
+
+[[package]]
+name = "gobject-core"
+version = "0.1.0"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/external_gst#acc8c735a7b9432e6f4357c5c72c07123a2e345b"
+dependencies = [
+ "bitflags",
+ "darling",
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "gobject-macros"
+version = "0.1.0"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/external_gst#acc8c735a7b9432e6f4357c5c72c07123a2e345b"
+dependencies = [
+ "darling",
+ "gobject-core",
+ "heck",
+ "proc-macro-crate",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "gobject-sys"
 version = "0.16.0"
 source = "git+https://github.com/gtk-rs/gtk-rs-core#c53cec7cd2b9235e818680391d8613c3e4bc5504"
@@ -677,7 +761,7 @@ dependencies = [
 [[package]]
 name = "gstreamer"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -685,6 +769,8 @@ dependencies = [
  "futures-core",
  "futures-util",
  "glib",
+ "gobject",
+ "gstreamer-objects-macros",
  "gstreamer-sys",
  "libc",
  "muldiv",
@@ -702,7 +788,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-app"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "bitflags",
  "futures-core",
@@ -718,7 +804,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-app-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gstreamer-base-sys",
@@ -730,7 +816,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-base"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "atomic_refcell",
  "bitflags",
@@ -744,7 +830,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-base-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gobject-sys",
@@ -754,9 +840,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "gstreamer-objects-macros"
+version = "0.1.0"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
+dependencies = [
+ "darling",
+ "gobject",
+ "gobject-core",
+ "heck",
+ "proc-macro-crate",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "gstreamer-rtp"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "bitflags",
  "glib",
@@ -769,7 +871,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-rtp-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gstreamer-base-sys",
@@ -781,7 +883,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-sdp"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib",
  "gstreamer",
@@ -791,7 +893,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-sdp-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gstreamer-sys",
@@ -802,7 +904,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gobject-sys",
@@ -813,7 +915,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-utils"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "gstreamer",
  "gstreamer-app",
@@ -825,7 +927,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-video"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -842,7 +944,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-video-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gobject-sys",
@@ -855,7 +957,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-webrtc"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib",
  "gstreamer",
@@ -867,7 +969,7 @@ dependencies = [
 [[package]]
 name = "gstreamer-webrtc-sys"
 version = "0.19.0"
-source = "git+https://gitlab.freedesktop.org/gstreamer/gstreamer-rs#fbad0fd0bcf2e409adbdece8617c41a623111158"
+source = "git+https://gitlab.freedesktop.org/thiblahute/gstreamer-rs?rev=origin/element_procmacro#46c8510f5de736e141943bf18e8f87c798a4cfa2"
 dependencies = [
  "glib-sys",
  "gstreamer-sdp-sys",
@@ -922,9 +1024,9 @@ checksum = "88a0d4dc39ec942e44c1c306aa196da67f2bd6a30dc7b4a475465c13ccf28817"
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.44"
+version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "808cf7d67cf4a22adc5be66e75ebdf769b3f2ea032041437a7061f97a63dad4b"
+checksum = "ef5528d9c2817db4e10cc78f8d4c8228906e5854f389ff6b076cee3572a09d35"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -932,6 +1034,12 @@ dependencies = [
  "wasm-bindgen",
  "winapi",
 ]
+
+[[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
 name = "idna"
@@ -1097,9 +1205,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
 
 [[package]]
 name = "openssl"
@@ -1884,9 +1992,11 @@ dependencies = [
  "clap",
  "fastrand",
  "futures",
+ "gobject",
  "gst-plugin-version-helper",
  "gstreamer",
  "gstreamer-app",
+ "gstreamer-base",
  "gstreamer-rtp",
  "gstreamer-sdp",
  "gstreamer-utils",
@@ -1901,6 +2011,7 @@ dependencies = [
  "tracing",
  "tracing-log",
  "tracing-subscriber",
+ "url",
  "uuid",
  "webrtcsink-protocol",
 ]
