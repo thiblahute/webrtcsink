@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "gobject"
 version = "0.1.0"
-source = "git+https://github.com/thiblahute/gobject?rev=origin/lk#bc61518a5210a320e4bf80b819aa35fc44150803"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/lk#4f2db1562786a07f0298658c04600fcdd0bb5fb7"
 dependencies = [
  "async-trait",
  "glib",
@@ -707,7 +707,7 @@ dependencies = [
 [[package]]
 name = "gobject-core"
 version = "0.1.0"
-source = "git+https://github.com/thiblahute/gobject?rev=origin/lk#bc61518a5210a320e4bf80b819aa35fc44150803"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/lk#4f2db1562786a07f0298658c04600fcdd0bb5fb7"
 dependencies = [
  "bitflags",
  "darling",
@@ -721,7 +721,7 @@ dependencies = [
 [[package]]
 name = "gobject-macros"
 version = "0.1.0"
-source = "git+https://github.com/thiblahute/gobject?rev=origin/lk#bc61518a5210a320e4bf80b819aa35fc44150803"
+source = "git+https://github.com/thiblahute/gobject?rev=origin/lk#4f2db1562786a07f0298658c04600fcdd0bb5fb7"
 dependencies = [
  "darling",
  "gobject-core",
