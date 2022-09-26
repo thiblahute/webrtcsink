@@ -43,7 +43,7 @@ mod iface {
         }
         #[signal]
         fn error(iface: &super::Signallable, error: &str) {}
-        #[signal(run_first)]
+        #[signal]
         fn request_meta(_iface: &super::Signallable) -> Option<gst::Structure> {
             None
         }
